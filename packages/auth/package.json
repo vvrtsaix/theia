@@ -1,0 +1,38 @@
+{
+  "name": "@theia/auth",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./auth": "./src/auth.ts",
+    "./access-control": "./src/access-control.ts",
+    "./middleware": "./src/middleware.ts",
+    "./errors": "./src/errors.ts"
+  },
+  "imports": {
+    "#auth": "./src/auth.ts",
+    "#access-control": "./src/access-control.ts",
+    "#middleware": "./src/middleware.ts",
+    "#errors": "./src/errors.ts"
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "typecheck": "tsc -b --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@theia/domain": "workspace:*",
+    "@theia/db": "workspace:*",
+    "effect": "catalog:",
+    "better-auth": "catalog:",
+    "drizzle-orm": "catalog:",
+    "postgres": "catalog:"
+  },
+  "devDependencies": {
+    "@effect/vitest": "catalog:",
+    "@types/node": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

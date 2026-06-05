@@ -1,0 +1,33 @@
+{
+  "name": "@theia/rpc-server",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./handlers": "./src/handlers/index.ts",
+    "./http": "./src/http.ts"
+  },
+  "imports": {
+    "#handlers": "./src/handlers/index.ts",
+    "#handlers/*": "./src/handlers/*.ts",
+    "#http": "./src/http.ts"
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "typecheck": "tsc -b --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@theia/domain": "workspace:*",
+    "@theia/db": "workspace:*",
+    "@theia/auth": "workspace:*",
+    "effect": "catalog:",
+    "drizzle-orm": "catalog:"
+  },
+  "devDependencies": {
+    "@effect/vitest": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

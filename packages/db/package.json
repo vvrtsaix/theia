@@ -1,0 +1,38 @@
+{
+  "name": "@theia/db",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./schema": "./src/schema/index.ts",
+    "./schema/*": "./src/schema/*.ts",
+    "./runtime": "./src/runtime/index.ts"
+  },
+  "imports": {
+    "#schema": "./src/schema/index.ts",
+    "#schema/*": "./src/schema/*.ts",
+    "#runtime": "./src/runtime/index.ts",
+    "#runtime/*": "./src/runtime/*.ts"
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "typecheck": "tsc -b --noEmit",
+    "generate": "drizzle-kit generate",
+    "migrate": "drizzle-kit migrate",
+    "studio": "drizzle-kit studio",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@theia/domain": "workspace:*",
+    "effect": "catalog:",
+    "drizzle-orm": "catalog:",
+    "postgres": "catalog:"
+  },
+  "devDependencies": {
+    "@effect/vitest": "catalog:",
+    "drizzle-kit": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

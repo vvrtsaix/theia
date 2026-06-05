@@ -1,0 +1,32 @@
+{
+  "name": "@theia/cluster-entities",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./ticket": "./src/ticket/index.ts",
+    "./runtime": "./src/runtime.ts"
+  },
+  "imports": {
+    "#ticket": "./src/ticket/index.ts",
+    "#ticket/*": "./src/ticket/*.ts",
+    "#runtime": "./src/runtime.ts"
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "typecheck": "tsc -b --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@theia/domain": "workspace:*",
+    "@theia/db": "workspace:*",
+    "effect": "catalog:",
+    "drizzle-orm": "catalog:"
+  },
+  "devDependencies": {
+    "@effect/vitest": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

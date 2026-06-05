@@ -1,0 +1,27 @@
+{
+  "name": "@theia/api",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "bun --watch src/main.ts",
+    "start": "bun src/main.ts",
+    "typecheck": "tsc -b --noEmit"
+  },
+  "dependencies": {
+    "@theia/domain": "workspace:*",
+    "@theia/db": "workspace:*",
+    "@theia/auth": "workspace:*",
+    "@theia/rpc-server": "workspace:*",
+    "@theia/cluster-entities": "workspace:*",
+    "@theia/otel": "workspace:*",
+    "effect": "catalog:",
+    "@effect/platform-bun": "catalog:",
+    "better-auth": "catalog:"
+  },
+  "devDependencies": {
+    "@types/bun": "catalog:",
+    "@types/node": "catalog:",
+    "typescript": "catalog:"
+  }
+}

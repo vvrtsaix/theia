@@ -1,0 +1,56 @@
+packages:
+  - apps/*
+  - packages/*
+
+# Force a single drizzle-orm version across the tree. Without this, drizzle-kit
+# and better-auth pull in a 0.44.7 peer variant that creates a second physical
+# install — TS then sees two distinct `SQL<unknown>` types from different
+# package paths and refuses to assign between them.
+overrides:
+  drizzle-orm: ^0.45.2
+
+catalog:
+  # Effect v4 — keep ALL effect packages in lockstep at the same beta
+  effect: 4.0.0-beta.78
+  "@effect/platform-bun": 4.0.0-beta.78
+  "@effect/sql-pg": 4.0.0-beta.78
+  "@effect/opentelemetry": 4.0.0-beta.78
+  "@effect/atom-solid": 4.0.0-beta.78
+  "@effect/vitest": 4.0.0-beta.78
+
+  # Database
+  drizzle-orm: ^0.45.2
+  drizzle-kit: ^0.31.0
+  postgres: ^3.4.5
+
+  # Frontend
+  solid-js: ^1.9.3
+  "@solidjs/router": ^0.15.0
+  "@kobalte/core": ^0.13.0
+  "@tanstack/solid-table": ^8.20.0
+  "lucide-solid": ^0.475.0
+  "solid-transition-group": ^0.3.0
+  "@modular-forms/solid": ^0.25.0
+  valibot: ^1.0.0
+  "@solid-primitives/event-listener": ^2.4.0
+  tailwindcss: ^4.0.0
+  vite: ^6.0.0
+  "vite-plugin-solid": ^2.11.0
+
+  # Auth
+  "better-auth": ^1.2.0
+
+  # Build / dev
+  typescript: ^5.7.2
+  "@biomejs/biome": ^1.9.4
+  vitest: ^3.0.0
+  "@types/node": ^22.10.0
+  "@types/bun": ^1.3.0
+
+  # OpenTelemetry
+  "@opentelemetry/api": ^1.9.0
+  "@opentelemetry/sdk-trace-base": ^1.30.0
+  "@opentelemetry/sdk-trace-node": ^1.30.0
+  "@opentelemetry/exporter-trace-otlp-http": ^0.57.0
+  "@opentelemetry/resources": ^1.30.0
+  "@opentelemetry/semantic-conventions": ^1.28.0

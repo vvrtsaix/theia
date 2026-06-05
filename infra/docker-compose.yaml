@@ -1,0 +1,46 @@
+name: theia
+
+services:
+  postgres:
+    image: postgres:18-alpine
+    container_name: theia-pg
+    environment:
+      POSTGRES_USER: theia
+      POSTGRES_PASSWORD: theia
+      POSTGRES_DB: theia
+      # `uuidv7()` is built into Pg 18 — no extension needed.
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./00-bootstrap.sql:/docker-entrypoint-initdb.d/00-bootstrap.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U theia -d theia"]
+      interval: 2s
+      timeout: 2s
+      retries: 20
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.115.0
+    container_name: theia-otel
+    command: ["--config=/etc/otel-collector.yaml"]
+    volumes:
+      - ./otel-collector.yaml:/etc/otel-collector.yaml:ro
+    ports:
+      - "4317:4317"   # OTLP gRPC
+      - "4318:4318"   # OTLP HTTP
+    depends_on:
+      jaeger:
+        condition: service_started
+
+  jaeger:
+    image: jaegertracing/all-in-one:1.62
+    container_name: theia-jaeger
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+    ports:
+      - "16686:16686"   # UI
+      - "14250:14250"   # gRPC
+
+volumes:
+  pgdata:

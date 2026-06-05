@@ -1,0 +1,13 @@
+{
+  "extends": "./tsconfig.base.json",
+  "files": [],
+  "references": [
+    { "path": "./packages/domain" },
+    { "path": "./packages/db" },
+    { "path": "./packages/auth" },
+    { "path": "./packages/rpc-server" },
+    { "path": "./packages/cluster-entities" },
+    { "path": "./packages/rpc-client" },
+    { "path": "./packages/otel" }
+  ]
+}

@@ -1,0 +1,37 @@
+{
+  "name": "@theia/domain",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./ids": "./src/ids.ts",
+    "./entities": "./src/entities/index.ts",
+    "./errors": "./src/errors/index.ts",
+    "./events": "./src/events/index.ts",
+    "./rpc": "./src/rpc/index.ts",
+    "./cluster": "./src/cluster/index.ts"
+  },
+  "imports": {
+    "#ids": "./src/ids.ts",
+    "#entities": "./src/entities/index.ts",
+    "#entities/*": "./src/entities/*.ts",
+    "#errors": "./src/errors/index.ts",
+    "#events": "./src/events/index.ts",
+    "#events/*": "./src/events/*.ts",
+    "#rpc": "./src/rpc/index.ts",
+    "#rpc/*": "./src/rpc/*.ts",
+    "#cluster": "./src/cluster/index.ts",
+    "#cluster/*": "./src/cluster/*.ts"
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "typecheck": "tsc -b --noEmit"
+  },
+  "dependencies": {
+    "effect": "catalog:"
+  },
+  "devDependencies": {
+    "typescript": "catalog:"
+  }
+}
