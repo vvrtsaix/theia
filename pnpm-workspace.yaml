@@ -31,7 +31,6 @@ catalog:
   "lucide-solid": ^0.475.0
   "solid-transition-group": ^0.3.0
   "@modular-forms/solid": ^0.25.0
-  valibot: ^1.0.0
   "@solid-primitives/event-listener": ^2.4.0
   tailwindcss: ^4.0.0
   vite: ^6.0.0

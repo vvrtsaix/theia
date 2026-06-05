@@ -1,18 +1,21 @@
 # Theia — Multi-tenant Ticket CRM
 
-Architecture plan. Effect-TS v4 (effect-smol) + SolidJS SPA + Postgres + OpenTelemetry + Effect Cluster.
+Architecture plan. Effect-TS v4 (effect-smol) + SolidJS SPA + Postgres 18 + OpenTelemetry + Effect Cluster.
+
+> **Status:** phases 0–9 committed. See "Phase plan" + "Current boundary" at the bottom.
 
 ## Locked decisions
 
 | Decision           | Choice                                                     |
 | ------------------ | ---------------------------------------------------------- |
 | Tenancy isolation  | Row-level (`tenant_id` column + Postgres RLS)              |
-| Frontend           | Solid SPA + `@effect/rpc` (no SSR)                         |
+| Frontend           | Solid SPA + `effect/unstable/rpc` (no SSR)                 |
 | Cluster posture    | Single-node MVP, Cluster + Actor APIs wired from day one   |
 | Auth               | `better-auth` (with Drizzle adapter + organizations plugin)|
 | Backend runtime    | Bun (Node fallback supported)                              |
 | DB                 | Postgres 18 (native `uuidv7()` for time-ordered keys)      |
 | Schema/migrations  | Drizzle (chosen for better-auth adapter compatibility)     |
+| DB driver          | `postgres-js` directly (NOT `@effect/sql-pg`)              |
 | Tracing            | OpenTelemetry via `@effect/opentelemetry` → OTLP           |
 
 ---
@@ -34,75 +37,71 @@ Architecture plan. Effect-TS v4 (effect-smol) + SolidJS SPA + Postgres + OpenTel
 | `@tanstack/solid-table`            | Headless data-grid: sort, filter, paginate; pairs with Kobalte cells         |
 | `tailwindcss`                      | Utility-first CSS; applied directly to Kobalte/table primitives              |
 | `lucide-solid`                     | Tree-shakable SVG icon components                                            |
-| `solid-transition-group`           | Mount/unmount animations for panels and dialogs                              |
+| `solid-transition-group`           | Mount/unmount animations for panels and dialogs _(declared; first use Phase 6.x)_ |
 
 ### Frontend — state, forms, schema
 
 | Package                            | Purpose                                                                      |
 | ---------------------------------- | ---------------------------------------------------------------------------- |
-| `modular-forms`                    | Fine-grained form state — per-field reactivity, no re-render storms          |
-| `@solidjs-community/solid-primitives` | Reactive utilities: element tracking, listeners, debounce                 |
+| `@modular-forms/solid`             | Fine-grained form state — per-field reactivity; driven via the `effectSchema` adapter (`apps/web/src/lib/effect-form.ts`) so domain Schemas are the SINGLE source of validation truth |
 
-### Network & auth
+> Forms use Effect Schema, NOT valibot/zod. modular-forms' built-in `valiForm`/`zodForm` adapters are bypassed by `effectSchema(domainSchema)`. valibot + zod only remain as upstream transitives of `@modular-forms/solid` and `better-auth` respectively — not in our direct dep graph.
+
+### Network & auth (client)
 
 | Package                            | Purpose                                                                      |
 | ---------------------------------- | ---------------------------------------------------------------------------- |
-| `@effect/rpc` + `@effect/rpc-http` | End-to-end type-safe RPC transport (SPA ↔ Effect backend)                    |
-| `better-auth`                      | Server: session cookies + Postgres adapter. Client SDK: reactive user state  |
+| `effect` (via `effect/unstable/rpc`) | RPC client — `RpcClient.make(group)` + `layerProtocolHttp({ url })`        |
+| `better-auth`                      | Server: session cookies + Drizzle adapter. Client SDK: `createAuthClient` + reactive session |
 
 ### Backend & data (v4 reality — verified against `~/Workspaces/oss/effect-smol`)
 
-v4 collapses most former `@effect/*` packages into the `effect` mega-package under the `unstable/` namespace. Only platform drivers, Pg client, OTel, and Vitest stay as separate packages.
+v4 collapses most former `@effect/*` packages into the `effect` mega-package under the `unstable/` namespace. Only platform drivers, OTel, and Vitest stay as separate packages.
 
 | Package + module                                | Purpose                                                                      |
 | ----------------------------------------------- | ---------------------------------------------------------------------------- |
-| `effect` (root)                                 | Effect, Layer, Context, Stream, Schema, ManagedRuntime, ...                  |
-| `effect/unstable/cluster`                       | `Entity`, `EntityAddress`, `Sharding`, `MessageStorage`, `ClusterSchema`     |
-| `effect/unstable/rpc`                           | `Rpc`, `RpcGroup`, `RpcClient`, `RpcServer`, `RpcMiddleware`                 |
-| `effect/unstable/httpapi`                       | `HttpApi`, `HttpApiGroup`, `HttpApiEndpoint`, `OpenApi` (free OpenAPI spec)  |
-| `effect/unstable/http`                          | `HttpRouter`, `HttpServer`, `HttpClient`, low-level HTTP                     |
-| `effect/unstable/sql`                           | `SqlClient`, `Statement`, `Migrator`, `SqlSchema` (DB-driver agnostic core)  |
-| `effect/unstable/observability`                 | OTel integration (used with `@effect/opentelemetry`)                         |
-| `effect/unstable/eventlog`                      | Event log primitives (audit log / event sourcing)                            |
-| `effect/unstable/reactivity`                    | Reactive primitives (Atom)                                                   |
-| `@effect/platform-bun`                          | Bun runtime adapter: `BunRuntime`, `BunClusterSocket`, Bun HTTP server       |
-| `@effect/sql-pg`                                | Postgres driver for `effect/unstable/sql` (`PgClient`, `SqlError`)           |
-| `@effect/opentelemetry`                         | OTel SDK layer factory                                                       |
+| `effect` (root)                                 | Effect, Layer, Context, Stream, Schema, ManagedRuntime, Queue, ...           |
+| `effect/unstable/cluster`                       | `Entity`, `EntityAddress`, `Sharding`, `ClusterSchema`, `TestRunner`         |
+| `effect/unstable/rpc`                           | `Rpc`, `RpcGroup`, `RpcClient`, `RpcServer`, `RpcSerialization`              |
+| `effect/unstable/http`                          | `HttpRouter`, `HttpServer`, `HttpClient`, `FetchHttpClient` (client transport) |
+| `effect/unstable/httpapi`                       | `HttpApi`, `HttpApiGroup`, `HttpApiEndpoint`, `OpenApi` _(not used yet)_     |
+| `effect/unstable/sql`                           | `SqlClient`, `Statement` _(not used — Drizzle owns SQL in this codebase)_   |
+| `@effect/platform-bun`                          | `BunRuntime`, `BunClusterSocket`, Bun HTTP server adapter                    |
+| `@effect/opentelemetry`                         | `NodeSdk.layer` for OTel SDK                                                 |
 | `@effect/vitest` (dev)                          | `it.effect`, `it.scoped`, `TestClock`-friendly test helpers                  |
-| `@effect/atom-solid`                            | Effect Atom → Solid signals binding for the SPA                              |
 | `drizzle-orm`                                   | Type-safe SQL builder + schema mapping                                       |
 | `drizzle-kit` (dev)                             | Migration generator from JS schema                                           |
+| `postgres` (`postgres-js`)                      | Native Pg driver; Drizzle sits on top of this                                |
+| `better-auth` + `@better-auth/drizzle-adapter`  | Auth + Drizzle adapter (pulled in via better-auth's peer)                    |
 
-**Pinned version (Phase 0):** `effect@4.0.0-beta.78` + all `@effect/*` siblings at the same beta. Pin exact via pnpm `catalog:` to keep all packages in lockstep.
+**Pinned versions (`pnpm-workspace.yaml` catalog):** `effect@4.0.0-beta.78` + all `@effect/*` siblings at the same beta. `drizzle-orm: ^0.45.2` is forced via `pnpm overrides` (dedupes peer ranges with better-auth + drizzle-kit).
 
 ### Postgres 18
 
-Native `uuidv7()` function: time-ordered UUIDs as primary keys → no B-tree fragmentation on high-concurrency writes, monotonic insert performance. Use `gen_random_uuidv7()` (or `uuidv7()` per final naming) as column default.
+Native `uuidv7()` function: time-ordered UUIDs as primary keys → no B-tree fragmentation on high-concurrency writes, monotonic insert performance.
 
 ```sql
 CREATE TABLE tickets (
   id          uuid PRIMARY KEY DEFAULT uuidv7(),
-  tenant_id   uuid NOT NULL REFERENCES tenants(id),
-  ...
+  tenant_id   uuid NOT NULL REFERENCES organization(id),
+  -- ...
 );
 ```
 
 Drizzle column form:
 
 ```ts
-id: uuid("id").primaryKey().default(sql`uuidv7()`),
+id: uuid().primaryKey().default(sql`uuidv7()`),
 ```
 
 ### Schema package note (v4)
 
-`@effect/schema` was a separate package in v3. In v4 (effect-smol), `Schema` is exported from `effect` directly:
+`@effect/schema` was a separate package in v3. In v4, `Schema` is exported from `effect` directly:
 
 ```ts
 import { Schema } from "effect"   // ✅ v4
 // not: import * as Schema from "@effect/schema"
 ```
-
-If `@effect/schema` still publishes as a transitional alias, do not depend on it — use the canonical import.
 
 ---
 
@@ -111,76 +110,83 @@ If `@effect/schema` still publishes as a transitional alias, do not depend on it
 ```
 theia/
 ├── apps/
-│   ├── api/                   # Effect HTTP + RPC + Cluster node
+│   ├── api/                   # Bun entrypoint — wires DB + Cluster + OTel (HTTP TBD Phase 7.x)
 │   └── web/                   # Solid SPA (Vite)
 ├── packages/
-│   ├── domain/                # Schema types, errors, RPC contracts (shared FE+BE)
-│   ├── db/                    # Drizzle schema + migrations + Pg layer
-│   ├── auth/                  # better-auth wiring + Effect session middleware
-│   ├── cluster-entities/      # TicketEntity, TenantEntity (actor logic)
-│   ├── rpc-server/            # Handler implementations
-│   ├── rpc-client/            # Type-safe client for Solid
-│   └── otel/                  # OpenTelemetry layer
+│   ├── domain/                # Schemas, errors, events, RPC groups, cluster messages
+│   ├── db/                    # Drizzle schema + migrations + Database service (tenant-bound tx)
+│   ├── auth/                  # better-auth wiring + access control + Effect session middleware
+│   ├── cluster-entities/      # TicketEntity Behavior
+│   ├── rpc-server/            # RPC handler implementations
+│   ├── rpc-client/            # RpcClient.make wrappers for the SPA
+│   └── otel/                  # @effect/opentelemetry NodeSdk layer
 ├── infra/
-│   ├── docker-compose.yaml    # Postgres + Jaeger/Tempo + OTel collector
-│   └── migrations/            # SQL bootstrap (RLS roles, extensions)
+│   ├── docker-compose.yaml    # Postgres 18 + OTel collector + Jaeger
+│   ├── 00-bootstrap.sql       # CREATE ROLE app_user (NOBYPASSRLS); Pg18 version check
+│   └── otel-collector.yaml
+├── ARCHITECTURE.md            # this file
+├── AGENT.md                   # AI-agent guidance
+├── CLAUDE.md                  # Claude Code variant
+├── README.md                  # human runbook
+├── biome.json                 # lint + format
 ├── package.json
-├── pnpm-workspace.yaml
-└── tsconfig.base.json
+├── pnpm-workspace.yaml        # catalog + overrides
+├── tsconfig.base.json
+└── tsconfig.json
 ```
+
+Every package uses **Node subpath imports** (`#name` in `package.json` `imports`) for intra-package paths. Cross-package uses workspace names (`@theia/<pkg>` via `exports`). See "Import conventions" below.
 
 ---
 
 ## Customization — per-tenant Workflow + dynamic roles
 
-### Status + priority
+### Status, priority, type, tag
 
-`TicketStatus` and `TicketPriority` are **opaque branded strings** at the domain layer (`NonEmptyString` + `Schema.brand`). Their valid values are defined per tenant in a `Workflow` config row, seeded with defaults on tenant creation. The TicketEntity actor validates each incoming `status`/`priority` against the tenant's Workflow at runtime — bad values raise `ValidationError`.
-
-`Workflow` shape (stored as one row per tenant):
+All four are **opaque branded strings** at the domain layer (`NonEmptyString` + `Schema.brand`). Their valid values are defined per tenant in a `Workflow` config row, seeded from `system_config.workflow_defaults` at tenant creation. The TicketEntity actor validates each incoming value against the tenant's Workflow at runtime — bad values raise `ValidationError` / `InvalidType` / `InvalidTag`.
 
 ```ts
 class Workflow extends Schema.Class<Workflow>("Workflow")({
   tenantId: TenantId,
   statuses:   Schema.Array(WorkflowStatus),    // [{ key, label, color, terminal }]
   priorities: Schema.Array(WorkflowPriority),  // [{ key, label, color, weight }]
-  transitions: Schema.Array(Schema.Tuple([TicketStatus, TicketStatus])),
+  transitions: Schema.Array(WorkflowTransition), // { from, to }
+  types:       Schema.Array(WorkflowType),     // [{ key, label, color, icon, defaultPriority }]
+  tags:        Schema.Array(WorkflowTag),      // [{ key, label, color }]
   defaultStatus: TicketStatus,
   defaultPriority: TicketPriority,
+  defaultTypeKey: Schema.NullOr(TicketType),
   updatedAt: Schema.DateTimeUtcFromString,
 })
 ```
 
-Seeded defaults (mirror prior closed enums) — tenants can add, edit labels/colors, or remove. Two invariants the system enforces:
+Tenant admins edit via the `workflow.*` RPC group. Invariants enforced server-side:
 
-1. At least one status with `terminal: true` must exist.
-2. `defaultStatus` and `defaultPriority` must exist in `statuses`/`priorities`.
-
-Workflow CRUD is admin-only (permission: `workflow:update`).
+1. At least one status with `terminal: true` exists.
+2. `defaultStatus` / `defaultPriority` / (optional) `defaultTypeKey` exist in their respective arrays.
+3. A status / priority / type cannot be removed if it's the configured default.
 
 ### User identity model — two orthogonal axes
 
 ```
-UserKind   = "customer" | "internal" | "system"   ← global, closed literal
-UserRole   = branded NonEmptyString               ← per-tenant, dynamic
+UserKind   = "customer" | "internal" | "system"   ← global, closed literal (column on `user`)
+UserRole   = branded NonEmptyString               ← per-tenant, dynamic (column on `member`)
 ```
 
-- **`UserKind`** is fixed at user creation. Drives auth + visibility rules at the framework layer (customers can't see internal users; system accounts bypass interactive auth).
-- **`UserRole`** is per-tenant. The same user can be a member of multiple tenants with a different role in each. Role names + their permissions are defined per tenant (e.g. `agent`, `L2`, `manager`).
+- **`UserKind`** is fixed at user creation. Drives auth + visibility rules at the framework layer (customers can't see internal users; system accounts bypass interactive auth and may write to `system_config`).
+- **`UserRole`** is per-tenant. The same user can be a member of multiple tenants with a different role in each. Role names + their permissions are stored in better-auth's `organization_role` table (`dynamicAccessControl`).
 
 ### Auth + permissions via better-auth
 
-The better-auth **organization plugin** + **`dynamicAccessControl`** option give us this for free:
+- One global `user` row per identity. Many `member` rows (one per tenant the user belongs to), each with a `role` string.
+- `dynamicAccessControl` stores roles + their statement-based permissions in the `organization_role` table — tenant admins create/edit roles at runtime.
+- `auth.api.hasPermission({ permissions: { ticket: ["transition"] } })` checks against the active member's role.
 
-- One user account, many `Member` rows (one per tenant they belong to), each with a `role` string + per-member `additionalFields` (e.g. `kind: UserKind`).
-- `dynamicAccessControl` stores roles + their statement-based permissions in DB tables — tenant admins create/edit roles at runtime.
-- `auth.api.hasPermission({ permissions: { ticket: ["transition"] } })` checks against the active member's role on every request.
-
-Domain defines the **Permission statement** (resource × action shape) — that's the schema better-auth's AC enforces against. See `packages/domain/src/entities/Permission.ts`.
+Domain defines the **Permission statement** (`packages/domain/src/entities/Permission.ts`) — the schema better-auth's AC enforces against. Built-in roles: `owner`, `admin`, `agent`, `customer` (`packages/auth/src/access-control.ts`).
 
 ### Customer scope — multi-tenant identity
 
-Customers and internals share the same `users` table. A user can be a customer of Tenant A and an agent at Tenant B — different `Member` rows, different roles, different visibility. The session's `activeOrganizationId` decides which tenant context the request runs under (and therefore which `SET LOCAL app.tenant_id` value).
+Customers and internals share the same `user` table. A user can be a customer of Tenant A and an agent at Tenant B — different `member` rows, different roles, different visibility. The session's `activeOrganizationId` decides which tenant context the request runs under (and which `app.tenant_id` GUC is bound).
 
 ### System-wide defaults — `system_config` table
 
@@ -191,11 +197,11 @@ System-wide configuration that seeds new tenants but is freely editable per tena
 | `workflow_defaults`| `SystemConfig.WorkflowDefaults` — statuses/priorities/types/tags/transitions/defaultStatus/defaultPriority/defaultTypeKey |
 | _(future)_         | `SystemConfig.FeatureFlags`, `SystemConfig.Limits`, ...             |
 
-**Bootstrap:** seed migration inserts `workflow_defaults` row with values mirroring the old `defaultWorkflowSeed` constant.
+**Bootstrap:** migration `0002_seed_system_config.sql` inserts the `workflow_defaults` row.
 
 **Tenant creation flow:** on `organization.create`, the handler reads `system_config.workflow_defaults` and INSERTs a per-tenant `workflow` row. Subsequent edits via `workflow.*` RPCs mutate the tenant's own row only — system defaults never re-sync.
 
-**Updating system defaults:** super-admin RPC (`UserKind = "system"`). Only affects **future** tenants — existing tenants keep their copy.
+**Updating system defaults:** super-admin RPC (`UserKind === "system"`). Only affects **future** tenants — existing tenants keep their copy.
 
 ---
 
@@ -203,23 +209,22 @@ System-wide configuration that seeds new tenants but is freely editable per tena
 
 | Concept                | Model                                                                                          |
 | ---------------------- | ---------------------------------------------------------------------------------------------- |
-| `TicketParticipant`    | Row per (ticket × user). Audit of every actor. `roles: Set<ParticipantRole>` accumulates as they interact (`reporter`, `assignee`, `commenter`, `mentioned`, `watcher`). |
+| `TicketParticipant`    | Row per (ticket × user). Audit of every actor. `roles: Array<ParticipantRole>` accumulates as they interact (`reporter`, `assignee`, `commenter`, `mentioned`, `watcher`). |
 | Subscription           | Flag on `TicketParticipant`: `subscribed: boolean`. Reporter/assignee/commenter auto-subscribe; explicit `subscribe`/`unsubscribe` RPC overrides. |
-| `TicketTag`            | Branded `NonEmptyString`. Tenant-defined closed list lives in `Workflow.tags`. Many-to-many via `ticket_tag_assignment` join table. |
-| `TicketType`           | Branded `NonEmptyString`. Tenant-defined closed list in `Workflow.types`. Single optional FK on `ticket.typeKey`. |
+| `TicketTag`            | Branded `NonEmptyString`. Tenant-defined list lives in `Workflow.tags`. Many-to-many via `ticket_tag_assignment`. |
+| `TicketType`           | Branded `NonEmptyString`. Tenant-defined list in `Workflow.types`. Single optional FK on `ticket.typeKey`. |
 | `Notification`         | Row per (recipient × event). Generated when a TicketEvent fires and matching subscribers exist. Delivery (email / webhook / in-app stream) lives in Phase 8. |
 
 **Auto-participation rules** (enforced by `TicketEntity`):
 
 - `OpenTicket` → add reporter with role `reporter`, `subscribed: true`.
 - `AssignTicket` → add assignee with role `assignee`, `subscribed: true`.
-- `CommentTicket` → add author with role `commenter`, `subscribed: true`.
-- `@mention` in a comment body → add mentioned user with role `mentioned`, `subscribed: true`.
-- Explicit `SubscribeTicket` RPC → add user with role `watcher`, `subscribed: true`.
+- `CommentTicket` → add author with role `commenter`, `subscribed: true`. Each `@mention` adds user with role `mentioned`, `subscribed: true`.
+- Explicit `SubscribeTicket` → add user with role `watcher`, `subscribed: true`.
 
-Unsubscribing flips `subscribed: false` but keeps the participant row — audit history is preserved.
+Unsubscribing flips `subscribed: false` but keeps the participant row — audit history preserved.
 
-**Per-type workflows (deferred):** v0 assumes one `Workflow` covers all ticket types. Real-world CRMs eventually need Bug-vs-Feature-vs-Incident to follow different state machines. Future migration path: pull `statuses` + `transitions` out of `Workflow` into a per-`TicketType` `WorkflowDef`; `Workflow` becomes a holder for tenant-wide tags + priorities + types.
+**Per-type workflows (deferred):** v0 assumes one `Workflow` covers all ticket types. Future: pull `statuses` + `transitions` per-`TicketType`.
 
 ---
 
@@ -228,259 +233,182 @@ Unsubscribing flips `subscribed: false` but keeps the participant row — audit 
 Every tenant-scoped table:
 
 ```sql
-CREATE TABLE tickets (
-  id          uuid PRIMARY KEY,
-  tenant_id   uuid NOT NULL REFERENCES tenants(id),
-  -- ...
-);
-
-ALTER TABLE tickets ENABLE ROW LEVEL SECURITY;
-
-CREATE POLICY tickets_tenant_isolation ON tickets
-  USING (tenant_id = current_setting('app.tenant_id', true)::uuid);
+ALTER TABLE ticket ENABLE ROW LEVEL SECURITY;
+ALTER TABLE ticket FORCE ROW LEVEL SECURITY;
+CREATE POLICY ticket_tenant_isolation ON ticket
+  USING (tenant_id = current_setting('app.tenant_id', true)::uuid)
+  WITH CHECK (tenant_id = current_setting('app.tenant_id', true)::uuid);
+GRANT SELECT, INSERT, UPDATE, DELETE ON ticket TO app_user;
 ```
 
-Application connects as `app_user` (no `BYPASSRLS`). Every transaction starts with:
+`app_user` connects as a `NOBYPASSRLS` role (created by `infra/00-bootstrap.sql`). Every transaction issues:
 
 ```sql
 SET LOCAL app.tenant_id = $1;
 ```
 
-Effect middleware enforces this at the SqlClient layer — no handler can run a query without an active tenant binding.
+via `Database.tx(...)` or `Database.txAs(tenantId, ...)`. With `current_setting('app.tenant_id', true)` the `true` flag makes the GUC return NULL when unset → policy is false for every row → zero rows returned, no crash.
 
-**Defense in depth:** application also filters by `tenant_id` in every query. RLS is the backstop, not the only line.
+**Tables WITHOUT RLS (intentional):**
+- better-auth-owned: `user`, `session`, `account`, `verification`, `organization`, `member`, `invitation`, `organization_role` — better-auth enforces authorization at the application layer.
+- `system_config` — system-wide; super-admin gated at the handler layer.
 
-**Schema-owned tables** (no `tenant_id`): `tenants`, `users`, `sessions`, `accounts` — better-auth owns these. RLS off.
+**Defense in depth:** handlers also filter by `tenant_id` in WHERE — RLS is the backstop, not the only line.
 
 ---
 
 ## Auth: better-auth + Effect
 
-better-auth provides:
-- Email/password, OAuth providers, magic links
-- Drizzle Postgres adapter
-- `organizations` plugin → maps 1:1 to **tenants**
-- Single `auth.handler(request)` style handler (Fetch API shaped)
-
-Integration:
-
 ```ts
-// packages/auth/src/auth.ts
-import { betterAuth } from "better-auth"
-import { drizzleAdapter } from "better-auth/adapters/drizzle"
-import { organization } from "better-auth/plugins"
-
+// packages/auth/src/auth.ts (excerpt)
 export const auth = betterAuth({
-  database: drizzleAdapter(db, { provider: "pg" }),
+  database: drizzleAdapter(db, { provider: "pg", schema: Schema }),
+  advanced: { database: { generateId: false } }, // defer to Pg uuidv7()
   emailAndPassword: { enabled: true },
-  plugins: [organization()],
+  user: { additionalFields: { kind: { type: "string", defaultValue: "customer", input: false } } },
+  plugins: [organization({ ac, roles, dynamicAccessControl: { enabled: true } })],
 })
 ```
 
-Mount as a catch-all under `/api/auth/*` in the Effect HTTP server (`@effect/platform/HttpRouter`).
+Effect side (`packages/auth/src/middleware.ts`) — `resolveSession(headers)` returns an `Effect<CurrentSession, SessionInvalid | NoActiveOrganization>` that:
 
-Effect-side session middleware (sketch):
+1. Calls `auth.api.getSession({ headers })`.
+2. Decodes `userId` + `activeOrganizationId` + `userKind` (from `user.kind` additional field).
+3. Pulls the active member's role via `auth.api.getActiveMemberRole({ headers })`.
+4. Provides `CurrentSession` to downstream handlers.
 
-```ts
-// packages/auth/src/CurrentSession.ts
-import { Context, Effect, Layer } from "effect"
-import { HttpServerRequest } from "@effect/platform"
+`CurrentSession.activeOrganizationId` is what `Database.tx` binds as `app.tenant_id` for RLS.
 
-export class CurrentSession extends Context.Service<CurrentSession, {
-  readonly userId: string
-  readonly activeOrganizationId: string  // = tenantId
-  readonly roles: ReadonlyArray<string>
-}>()("app/CurrentSession") {}
-
-export const SessionMiddleware = HttpApiMiddleware.Tag<SessionMiddleware>()(
-  "SessionMiddleware",
-  {
-    provides: CurrentSession,
-    failure: Schema.Union(Unauthorized, NoActiveTenant),
-  },
-)
-```
-
-Handler resolves the cookie → `auth.api.getSession({ headers })` → constructs `CurrentSession` → also calls `SET LOCAL app.tenant_id` on the active Pg transaction.
-
-> **Verify on integration:** confirm better-auth's exact `getSession` API surface and Drizzle adapter import path against current docs — both moved in 2025.
+> **Verify on integration (Phase 7.x):** confirm the exact HTTP adapter path for mounting `auth.handler` under `/api/auth/*` once the `effect/unstable/http` API stabilises.
 
 ---
 
 ## Effect Cluster + Actor pattern
 
-`@effect/cluster` provides sharded entities (actor-like). Each entity:
-- Has a unique ID (`EntityAddress`)
-- Has typed messages (request/reply)
-- Has state managed by a `Behavior`
-- Is mailbox-serialized — one message at a time per entity
+`effect/unstable/cluster` provides sharded entities (actor-like). Each entity:
+- Has an address (`<tenantId>:<ticketId>` for `TicketEntity`).
+- Has typed messages via `Rpc.make(...)`.
+- Maintains in-memory state across messages — mailbox-serialized.
+- State-mutating messages annotated `ClusterSchema.Persisted = true` survive runner crashes.
 
 ### Entities
 
-**`TicketEntity`** (one actor per ticket)
-- State: `{ status, assigneeId, version, lastEvent }`
-- Messages: `Open`, `Assign`, `Comment`, `Transition(to)`, `Close`, `Subscribe`
-- Enforces state machine: `open → in_progress → waiting_on_customer → resolved → closed`
-- Emits domain events to `ticket_events` table + cluster pub/sub
-- `Subscribe` returns a `Stream` of events for live UI
+**`TicketEntity`** (one actor per ticket) — all 14 messages implemented:
+- Reads: `Get`, `ListParticipants`, `SubscribeEvents`
+- Mutations: `Open`, `Assign`, `Unassign`, `Transition`, `ChangePriority`, `ChangeType`, `AddTag`, `RemoveTag`, `Comment`, `Subscribe`, `Unsubscribe`
 
-**`TenantEntity`** (one actor per tenant)
-- State: `{ activeUsers, presence, settings }`
-- Messages: `Touch(userId)`, `GetPresence`, `BroadcastNotification`
+Each handler: open `Database.txAs(tenantId, async tx => ...)` → load ticket+tags+participants → load `Workflow` (fresh, no cache) → validate version + workflow → write ticket row + event log + participants in same tx → bump `version` → return updated `Ticket`.
 
-### Storage
+### Storage (current)
 
-`PgClusterStorage` (Postgres-backed shard/state store). Tables created via `@effect/cluster` migrations. Same DB as app data initially; can split later.
+`TestRunner.layer` (in-memory, single-process). Wired in `packages/cluster-entities/src/runtime.ts`. Production swap point flagged — `ClusterProdLive` will use a Bun/Node cluster socket layer + Pg-backed `MessageStorage` / `RunnerStorage`.
 
-### Single-node deploy
-
-`apps/api` runs both `Cluster.ShardManager` and a sharding node. No external coordinator. Code uses `Cluster.Sharded.send(entity, message)` — when scaled out, only the storage backend changes.
-
-### Actor wiring (v4-correct, verified against effect-smol)
-
-An entity is a set of `Rpc.make(...)` definitions packaged via `Entity.make(type, [rpcs])`. The handler layer carries the in-memory state (Ref/SubscriptionRef). Cluster takes care of routing, mailbox serialization, and passivation.
+### Actor wiring (current code)
 
 ```ts
-import { Entity, ClusterSchema } from "effect/unstable/cluster"
-import { Rpc } from "effect/unstable/rpc"
-import { Effect, Ref, Schema } from "effect"
-
-// 1) Messages (RPCs) — defined in `packages/domain/cluster/ticket.ts`
+// packages/domain/src/cluster/ticket.ts
 export const OpenTicket = Rpc.make("Open", {
-  payload: { title: Schema.String, description: Schema.String },
+  payload: { tenantId, reporterId, title, description, priority, typeKey, tags },
   success: Ticket,
-  error: AlreadyOpen,
+  error: Schema.Union([ValidationError, InvalidType, InvalidTag, InfrastructureError]),
 }).annotate(ClusterSchema.Persisted, true)
+// ... 13 more messages
 
-export const Assign = Rpc.make("Assign", {
-  payload: { assigneeId: UserId },
-  success: Ticket,
-})
+export const TicketEntity = Entity.make("Ticket", [OpenTicket, /* ... */])
 
-export const SubscribeEvents = Rpc.make("SubscribeEvents", {
-  success: TicketEvent,
-  stream: true,
-})
-
-// 2) Entity definition (also in `domain`)
-export const TicketEntity = Entity.make("Ticket", [OpenTicket, Assign, SubscribeEvents])
-
-// 3) Handler layer (in `packages/cluster-entities/`)
-export const TicketEntityLive = TicketEntity.toLayer(
+// packages/cluster-entities/src/ticket/index.ts
+export const TicketEntityLive = ClusterMessages.TicketEntity.toLayer(
   Effect.gen(function* () {
-    const state = yield* Ref.make<TicketState>(initial)
-    return TicketEntity.of({
-      Open:   ({ payload }) => ...,
-      Assign: ({ payload }) => ...,
-      SubscribeEvents: () => streamOfEvents.pipe(Rpc.fork),
+    const db = yield* Database
+    return ClusterMessages.TicketEntity.of({
+      Open: ({ payload }) => /* validate workflow + insert ticket + event + participant */,
+      Assign: ({ payload }) => /* version guard + update + event + auto-participate */,
+      // ... 12 more
     })
   }),
   { maxIdleTime: "10 minutes" },
 )
 
-// 4) Client (from anywhere with the cluster layer)
-const program = Effect.gen(function* () {
-  const clientFor = yield* TicketEntity.client
-  const ticket    = clientFor(ticketId)
-  yield* ticket.Assign({ assigneeId: userId })
-})
+// Client (from anywhere with the cluster layer + tenant context)
+const clientFor = yield* ClusterMessages.TicketEntity.client
+const ticket = clientFor(`${tenantId}:${ticketId}`)
+yield* ticket.Assign({ assigneeId, actorId, expectedVersion })
 ```
 
-Cluster transport (single-node MVP): `BunClusterSocket.layer()` from `@effect/platform-bun`, backed by `@effect/sql-pg` for `MessageStorage` + `RunnerStorage`. For tests: `TestRunner.layer` from `effect/unstable/cluster`.
+> **v4 quirk:** `Entity.toLayer`'s `HandlerServices` type does not currently exclude `CurrentAddress` from inferred `R`. `apps/api/src/main.ts` casts `AppLive` to `Layer<never, unknown, never>` until effect-smol pins this.
 
 ---
 
 ## RPC layer (`effect/unstable/rpc`)
 
-Contracts in `packages/domain` — single source of truth, shared FE+BE.
+Contracts in `packages/domain/src/rpc/*.ts` — single source of truth, shared FE+BE. Every RPC error union includes `InfrastructureError` so handlers can map `SqlError` / cluster errors at the boundary.
 
 ```ts
-// packages/domain/src/rpc/ticket.ts
-import { Schema } from "effect"
-import { Rpc, RpcGroup } from "effect/unstable/rpc"
-
-export class TicketRpc extends RpcGroup.make(
-  Rpc.make("ticket.list", {
-    success: Schema.Array(TicketSummary),
-    error: Unauthorized,
-    payload: { cursor: Schema.optional(Schema.String) },
-  }),
-  Rpc.make("ticket.open", {
-    success: Ticket,
-    error: Schema.Union(Unauthorized, ValidationError),
-    payload: { title: Schema.String, description: Schema.String },
-  }),
-  Rpc.make("ticket.events", {
-    success: TicketEvent,
-    error: Unauthorized,
-    payload: { ticketId: TicketId },
-    stream: true,
-  }),
-) {}
+export const TicketRpc = RpcGroup.make(
+  Rpc.make("ticket.list", { payload: {...}, success: {...}, error: Schema.Union(AuthErrors) }),
+  Rpc.make("ticket.events", { payload: { id: TicketId }, success: TicketEvent, error: ..., stream: true }),
+  // ...
+)
 ```
 
-Server (`packages/rpc-server`) provides implementations using services + Cluster entities. Client (`packages/rpc-client`) is generated, type-safe, and used directly from Solid via signals.
+Groups:
+- `TicketRpc` — ticket CRUD + participants + subscribe + events stream
+- `WorkflowRpc` — admin CRUD on the tenant Workflow row
+- `NotificationRpc` — per-user feed
+- `SystemConfigRpc` — super-admin only
+- `SearchRpc` — `ticket.search` (Phase 9)
+- `BulkRpc` — bulk transition/assign/changePriority (Phase 9)
+- `AuditRpc` — query against `ticket_event` (Phase 9)
 
-Transport: HTTP + SSE for streaming (mounted on `/api/rpc/*`).
+Server (`packages/rpc-server`) — handlers go through `Database.tx` (RLS-bound) for direct DB queries; mutation handlers delegate to `TicketEntity.client` for ticket state changes. Drizzle query builder for all SQL (`#handlers/_shared.ts` has helpers).
+
+Client (`packages/rpc-client`) — `RpcClient.make(group)` per group + `layerProtocolHttp({ url })` + `FetchHttpClient.layer` + JSON serialization. Wrapped in one `ManagedRuntime` per SPA process.
+
+Transport: HTTP (mounted at `/rpc/<group>` once Phase 7.x lands). Stream RPCs use HTTP chunked / SSE.
 
 ---
 
 ## OpenTelemetry
 
 ```ts
-// packages/otel/src/Otel.ts
-import { NodeSdk } from "@effect/opentelemetry"
-import { OTLPTraceExporter } from "@opentelemetry/exporter-trace-otlp-http"
-import { BatchSpanProcessor } from "@opentelemetry/sdk-trace-base"
+// packages/otel/src/index.ts
+const OtelConfig = Config.all({
+  endpoint: Config.string("OTEL_EXPORTER_OTLP_ENDPOINT").pipe(Config.withDefault("http://localhost:4318/v1/traces")),
+  serviceName: Config.string("OTEL_SERVICE_NAME").pipe(Config.withDefault("theia-api")),
+  serviceVersion: Config.string("OTEL_SERVICE_VERSION").pipe(Config.withDefault("0.0.0")),
+})
 
-export const OtelLive = NodeSdk.layer(() => ({
-  resource: { serviceName: "theia-api" },
-  spanProcessor: new BatchSpanProcessor(
-    new OTLPTraceExporter({ url: process.env.OTEL_EXPORTER_OTLP_ENDPOINT }),
-  ),
-}))
+export const OtelLive = NodeSdk.layer(
+  Effect.map(OtelConfig, (c) => ({
+    resource: { serviceName: c.serviceName, serviceVersion: c.serviceVersion },
+    spanProcessor: new BatchSpanProcessor(new OTLPTraceExporter({ url: c.endpoint })),
+  })),
+)
 ```
 
-What gets traced automatically:
-- Every `Effect.gen` block — fiber-level spans
-- Every Pg query via `@effect/sql-pg` (parameterized, no PII)
-- Every HTTP handler and RPC method
-- Every Cluster entity message
+Wraps the entire `AppLive` stack — every Effect fiber, Drizzle query, HTTP handler, cluster entity message produces a span. Local dev: OTel collector + Jaeger via `infra/docker-compose.yaml`. Prod: OTLP → Tempo / Honeycomb / Grafana Cloud.
 
 Add custom spans inside handlers with `Effect.withSpan("ticket.open", { attributes: { tenantId } })`.
 
-Local dev: OTel collector + Jaeger in docker-compose. Prod: OTLP → Tempo/Honeycomb/Grafana Cloud.
-
 ---
 
-## Layer composition
+## Layer composition (current `apps/api/src/main.ts`)
 
 ```ts
-// apps/api/src/AppLive.ts
-const AppLive = Layer.mergeAll(
-  // observability first — wraps everything below
-  OtelLive,
+const AppLive: Layer.Layer<never, unknown, never> = ClusterTestLive.pipe(
+  Layer.provide(DatabaseLive),
+  Layer.provide(OtelLive),
+) as unknown as Layer.Layer<never, unknown, never>
 
-  // config + DB
-  ConfigLive,
-  PgLive,                         // Pg pool, sets SET LOCAL on each tx
+const program = Effect.gen(function* () {
+  yield* Effect.logInfo("theia api: layers built; waiting for HTTP wiring (Phase 7.x)")
+  yield* Effect.never
+}).pipe(Effect.provide(AppLive)) as Effect.Effect<never, unknown, never>
 
-  // auth
-  AuthLive.pipe(Layer.provide(PgLive)),
-
-  // cluster
-  ClusterStorageLive,             // PgClusterStorage
-  ShardManagerLive.pipe(Layer.provide(ClusterStorageLive)),
-  TicketEntityLive,
-  TenantEntityLive,
-
-  // RPC + HTTP
-  RpcHandlersLive,
-  HttpServerLive,
-)
-
-NodeRuntime.runMain(Layer.launch(AppLive))
+BunRuntime.runMain(program)
 ```
+
+The cast unblocks the build pending the effect-smol `Entity.toLayer` fix. HTTP server + RPC mount + better-auth handler land in Phase 7.x.
 
 ---
 
@@ -490,52 +418,58 @@ NodeRuntime.runMain(Layer.launch(AppLive))
 apps/web/
 ├── src/
 │   ├── lib/
-│   │   ├── rpc.ts           # generated rpc-client + auth-aware fetch
-│   │   └── auth.ts          # better-auth/solid client
-│   ├── routes/              # @solidjs/router file-based routes
-│   ├── components/
-│   ├── features/
-│   │   ├── tickets/
-│   │   └── tenant/
-│   └── app.tsx
+│   │   └── rpc.ts                # getClients() + run(Effect) over ManagedRuntime
+│   ├── auth/
+│   │   ├── client.ts             # createAuthClient + organizationClient
+│   │   └── session.ts            # createResource over authClient.getSession()
+│   ├── lib/
+│   │   ├── rpc.ts                # (above)
+│   │   └── effect-form.ts        # modular-forms validate adapter over Effect Schema
+│   ├── routes/
+│   │   ├── login.tsx             # modular-forms + Effect Schema (effectSchema adapter)
+│   │   ├── tickets.tsx           # @tanstack/solid-table over TicketRpc.list
+│   │   ├── ticket-detail.tsx     # createResource on TicketRpc.get
+│   │   └── settings.tsx          # stub
+│   ├── app.tsx                   # route tree + sidebar shell
+│   ├── entry.tsx                 # <Router><App/></Router>
+│   └── styles.css                # @import "tailwindcss"
 ├── index.html
-└── vite.config.ts
+└── vite.config.ts                # proxy /api + /rpc → :3000
 ```
 
-State: Solid signals + resources for one-shot queries; RPC stream subscriptions via `createResource` + AbortController.
+State: Solid signals + `createResource` for one-shot queries. RPC stream subscriptions (Phase 6.x): `createResource` + AbortController, or `@effect/atom-solid` for atom-based reactivity.
 
-No SSR — auth-gated SPA. Static assets served by the Effect HTTP server (or a CDN in prod).
+No SSR — auth-gated SPA. Static assets served by the Bun HTTP server in prod (Phase 7.x) or a CDN.
 
 ---
 
 ## Import conventions — Node subpath imports (`#`)
 
-Every package uses Node subpath imports (`#name` in `package.json` `imports`) for **intra-package** references. Cross-package imports use the workspace name (`@theia/<pkg>` via `exports` map).
+Every package uses Node subpath imports for **intra-package** references. Cross-package imports use workspace names (`@theia/<pkg>` via `exports` map).
 
 ### Why not relative paths (`../ids.js`)?
 
 - Brittle on move/rename.
-- Hard to grep for.
+- Hard to grep.
 - Mixed with `node_modules` paths in reviews.
 
 ### Why not TS `paths`?
 
-TypeScript `paths` is compile-time only. `tsc` emit preserves the alias, so any downstream package consuming the `.d.ts` cannot resolve it. Subpath imports are resolved by Node/Bun at runtime relative to the **source file's** nearest `package.json` — cross-package consumption stays correct, no `tsc-alias` post-processor required.
+TypeScript `paths` is compile-time only. `tsc` emit preserves the alias → downstream consumers break. Subpath imports resolve at runtime relative to the **source file's** nearest `package.json` — cross-package consumption stays correct, no `tsc-alias` plugin needed.
 
 ### Pattern
 
 ```jsonc
 // packages/<pkg>/package.json
 {
-  "exports": {                                  // ← cross-package surface
+  "exports": {                              // ← cross-package surface
     ".":         "./src/index.ts",
     "./errors":  "./src/errors/index.ts"
   },
-  "imports": {                                  // ← intra-package surface
+  "imports": {                              // ← intra-package surface
     "#ids":         "./src/ids.ts",
     "#entities":    "./src/entities/index.ts",
-    "#entities/*":  "./src/entities/*.ts",
-    "#errors":      "./src/errors/index.ts"
+    "#entities/*":  "./src/entities/*.ts"
   }
 }
 ```
@@ -554,7 +488,7 @@ import { Ticket } from "@theia/domain/entities"
 1. **Never** use `../*.js` or `./*.js` for cross-directory imports inside a package — use `#name`.
 2. Same-directory imports (`./Sibling.ts`) are fine.
 3. Every new package gets its own `imports` map covering every top-level src directory.
-4. Tooling: TS `NodeNext`/`Bundler` resolution + Bun runtime both resolve `#x` natively. No extra plugin.
+4. Tooling: TS `NodeNext` resolution + Bun + Node 18+ all resolve `#x` natively.
 
 ---
 
@@ -565,75 +499,123 @@ Contracts are the source of truth. Server + client + DB + docs all derive from `
 ### Layered package dependency rule
 
 ```
-domain  ──→  (depends on nothing app-specific; only `effect` + Schema)
+domain  ──→  (depends only on `effect`)
   ▲
-  ├── db              (maps domain types ↔ Drizzle tables; cannot widen domain)
-  ├── auth            (uses domain Session/User/Tenant types)
-  ├── cluster-entities (Behavior over domain types)
+  ├── db              (Drizzle tables mirror domain Schemas; parity test enforces)
+  ├── auth            (uses domain UserKind/UserRole/Session types)
+  ├── cluster-entities (Behavior over domain messages)
   ├── rpc-server      (implements contracts; cannot change shapes)
-  └── rpc-client      (generated from contracts; consumed by web)
+  ├── rpc-client      (RpcClient.make wraps domain groups)
+  └── otel            (no domain coupling; OTel SDK only)
               ▲
               └── apps/web (no direct access to db/cluster — only rpc-client)
 ```
 
-`domain` has zero runtime deps beyond `effect`. Imports from `domain` flow strictly outward.
-
 ### Definition order (per feature)
 
-1. **Entity Schema** (`domain/src/entities/`) — `TicketId` brand, `Ticket` Schema.Class, `TicketStatus` literal union.
-2. **Domain errors** (`domain/src/errors/`) — `Schema.TaggedErrorClass` per failure mode (`NotFound`, `Unauthorized`, `InvalidTransition`, etc.).
-3. **Events** (`domain/src/events/`) — `Schema.TaggedStruct` per domain event (`TicketOpened`, `TicketAssigned`, ...). Versioned.
-4. **RPC group** (`domain/src/rpc/`) — `Rpc.make(name, { payload, success, error, stream? })`. Names are stable wire identifiers.
-5. **Cluster messages** (`domain/src/cluster/`) — `Schema.TaggedStruct` for actor mailbox messages, paired with reply types.
+1. **Entity Schema** (`domain/src/entities/`) — branded ID + `Schema.Class`.
+2. **Domain errors** (`domain/src/errors/`) — `Schema.TaggedErrorClass` per failure mode.
+3. **Events** (`domain/src/events/`) — `Schema.TaggedStruct` per domain event, versioned via `v` field.
+4. **RPC group** (`domain/src/rpc/`) — `Rpc.make(name, { payload, success, error, stream? })`.
+5. **Cluster messages** (`domain/src/cluster/`) — `Rpc.make` for actor mailbox; `Entity.make(name, [rpcs])`.
 6. **Review + merge** the domain PR. Implementation PRs follow.
 
 ### Enforcement
 
-- `domain` is referenced by `tsconfig` path aliases; lint rule rejects cross-package imports that bypass it.
-- CI step: `pnpm --filter domain build && pnpm --filter '*' typecheck` — any contract change forces dependents to update or fail.
-- Contract changes that break the wire (rename/remove field, change error tag) require a **versioned migration** (introduce v2 RPC, deprecate v1, dual-handle for one release).
-
-### What you get for free
-
-- **Type-safe RPC end-to-end** — `@effect/rpc` derives client signatures from the group definition; no manual SDK.
-- **OpenAPI** — `@effect/rpc` group → JSON Schema export for external consumers / docs site.
-- **Cluster reply types** — same Schemas used for actor messages serialize across nodes when sharding scales out.
-- **Form validation** — `modular-forms` consumes the same `Schema` as the RPC payload; one validation rule, two enforcement points.
-- **DB ↔ domain parity** — Drizzle table types are asserted against `domain` Schemas in a unit test; mismatches fail CI (see Phase 0).
+- `tsconfig` project refs make `domain` build first; downstream typecheck fails on any breaking contract change.
+- DB ↔ domain parity test in `packages/db/test/parity.test.ts` runs on every CI.
+- Contract changes that break the wire (rename/remove field, change error tag) require a versioned migration.
 
 ### Anti-patterns
 
-- Server handler returning a wider shape than the contract success Schema. Fix: tighten the Schema or narrow the return.
-- Client casting RPC errors to `any` to handle them. Fix: every error is a `Schema.TaggedErrorClass` — match on `_tag`.
-- DB type leaks into the RPC contract (e.g. a `Date` column exposed as JS `Date` over the wire). Fix: contract uses `Schema.Date` (ISO string); db layer encodes.
+- Server handler returning a wider shape than the contract `success` Schema. Fix: tighten the Schema or narrow the return.
+- Client casting RPC errors to `any`. Fix: every error is a `Schema.TaggedErrorClass` — match on `_tag`.
+- DB type leaks into the RPC contract (e.g. raw JS `Date` over the wire). Fix: contract uses `Schema.DateTimeUtcFromString`; db layer encodes.
 - Adding an entity field directly in `drizzle/schema.ts` without first updating `domain`. Fix: domain PR → db PR → migration PR.
 
 ---
 
-## Phase plan (contract-first reorder)
+## Phase plan
 
-| Phase | Deliverable                                                              |
-| ----- | ------------------------------------------------------------------------ |
-| 0     | pnpm monorepo + `domain` package skeleton + tsconfig path aliases + lint |
-| 1     | **Domain contracts v0**: `Tenant`, `User`, `Ticket`, `TicketEvent`, errors, RPC group stubs, cluster message Schemas — merged before any handler exists |
-| 2     | Postgres 18 + Drizzle schema mirroring `domain` + RLS bootstrap + parity test (`domain ↔ db`) |
-| 3     | better-auth + organizations + Effect `CurrentSession` middleware (using domain `Session`) |
-| 4     | `@effect/rpc` server: implement Phase 1 contracts (handlers return contract shapes only) |
-| 5     | Cluster + `TicketEntity` Behavior over domain messages + event log table |
-| 6     | Solid SPA: `rpc-client` consumed via `modular-forms` + `@tanstack/solid-table` |
-| 7     | OpenTelemetry + local Jaeger + span attributes derived from contract names |
-| 8     | Real-time: entity event Stream → RPC stream contract → Solid signals     |
-| 9     | Polish: search (pg_trgm), bulk ops, audit log (events table is the audit log) |
+| Phase | Deliverable                                                              | Status |
+| ----- | ------------------------------------------------------------------------ | ------ |
+| 0     | pnpm monorepo + `domain` package skeleton + tsconfig + lint              | ✅ done |
+| 1     | Domain contracts: entities, errors, events, RPC groups, cluster messages | ✅ done |
+| 2     | Postgres 18 + Drizzle schema + RLS bootstrap + domain↔db parity test     | ✅ done |
+| 3     | better-auth + organizations + Effect `CurrentSession` middleware         | ✅ done |
+| 4     | `effect/unstable/rpc` server: handlers + per-group HTTP layer            | ✅ done (compiles; HTTP mount pending Phase 7.x) |
+| 5     | Cluster + `TicketEntity` Behavior + event log table                      | ✅ done (TestRunner; Pg storage = Phase 5.x) |
+| 6     | Solid SPA: `rpc-client` + auth + ticket list/detail + `modular-forms` (login)| ✅ done (atom-solid reactive session binding = Phase 6.x) |
+| 7     | OpenTelemetry + local Jaeger + `apps/api` HTTP server                    | 🟡 OTel done; HTTP server wiring = Phase 7.x |
+| 8     | Real-time: entity event Stream → RPC stream → Solid signals              | 🟡 in-memory channel + Pg LISTEN/NOTIFY triggers wired; Stream consumer = Phase 8.x |
+| 9     | Polish: pg_trgm search + bulk ops + audit log                            | 🟡 contracts + migrations done; handler impls = Phase 9.x |
+
+### Current boundary (Phase 7.x → 9.x slices)
+
+- **Phase 7.x:** `apps/api/src/main.ts` mounts `BunHttpServer` + `RpcServer.layerHttp` per group + `auth.handler` at `/api/auth/*`. Blocker: `effect/unstable/http` API still moving between betas.
+- **Phase 5.x:** `ticket.open` RPC handler currently dies — needs to construct a fresh `<tenantId>:<ticketId>` address and forward to `TicketEntity.client`.
+- **Phase 8.x:** Pg-backed `EventChannel` consuming `LISTEN ticket_event_inserted` via `postgres-js` `listen()`.
+- **Phase 6.x:** workflow editor + ticket create dialog forms (login already wired with `modular-forms` + Effect Schema via `effectSchema` adapter); `@effect/atom-solid` reactive session binding.
+- **Phase 9.x:** real handler impls for `ticket.search`, `ticket.bulk*`, `audit.list`.
 
 ---
 
-## Open questions / pre-build verifications
+## Forms — single source of validation truth
 
-1. ~~**Cluster v4 API surface**~~ — **resolved**: `Entity.make(type, [rpcs])` + `entity.toLayer(impl, opts)`. Source: `effect/unstable/cluster/Entity.ts`.
-2. **better-auth + Effect** — confirm: does `auth.handler` accept Fetch `Request`? Does the organizations plugin expose `activeOrganizationId` on the session? Read current better-auth docs before phase 3.
-3. **Cluster + better-auth coexistence** — sessions must be valid before any entity message is routed. Use `RpcMiddleware` to enforce.
-4. **RLS and connection pooling** — `SET LOCAL` is transaction-scoped. With pgBouncer in transaction-pooling mode this works; in session mode it would leak. Pin pgBouncer mode in infra.
-5. **RPC streaming over HTTP** — `Rpc.make(..., { stream: true })` + `RpcSerialization` confirmed. Transport choice (SSE vs WS) determined by `RpcServer` layer + platform-bun adapter.
+The web app uses `@modular-forms/solid` for form state but drives validation
+through **domain Schemas** via a tiny adapter:
+
+```ts
+// apps/web/src/lib/effect-form.ts
+export const effectSchema = <S extends Schema.Top>(schema: S) =>
+  (values: unknown): Record<string, string> => {
+    try {
+      Schema.decodeUnknownSync(schema as never)(values)
+      return {}
+    } catch (e) {
+      const errors: Record<string, string> = {}
+      walkIssue((e as { cause?: unknown }).cause ?? e, errors)
+      return errors
+    }
+  }
+```
+
+Pattern (login):
+
+```ts
+const LoginSchema = Schema.Struct({
+  email:    Schema.NonEmptyString.check(Schema.isMinLength(3)),
+  password: Schema.NonEmptyString.check(Schema.isMinLength(8)),
+})
+
+const [form, { Form, Field }] = createForm<LoginInput>({
+  validate: effectSchema(LoginSchema),
+  validateOn: "blur",
+  revalidateOn: "input",
+})
+```
+
+**No valibot, no zod, no parallel client schemas.** modular-forms' built-in
+`valiForm`/`zodForm` adapters are bypassed. valibot + zod remain in
+`pnpm-lock.yaml` only as upstream transitives (`@modular-forms/solid` peer +
+`better-auth` internal); our source imports neither.
+
+Future forms (workflow editor, ticket create dialog) reuse domain Schemas
+the same way — same Schema that the RPC contract uses.
+
+---
+
+## v4 quirks logged (cross-reference)
+
+- `Schema.Union([...])` takes an array, not spread.
+- `Effect.catchAll` → `Effect.catch`. `Layer.scoped` → `Layer.effect`.
+- `Either` → `Result.Result`. `Mailbox` → `Queue.Queue`. `Scope.extend` → `Scope.provide`.
+- `Stream.async` → `Stream.callback`; callback receives `Queue.Queue<A>`. Sync push: `Queue.offerUnsafe(queue, value)` (note suffix order).
+- `Schema.decode(s)` is a schema combinator. For Effect-returning decode use `Schema.decodeEffect(s)(v)` / `Schema.decodeUnknownEffect(s)(v)`. Decode failure tag is `"SchemaError"` not `"ParseError"`.
+- `RpcGroup.toLayer` handlers receive `(payload, options?) => Effect` — payload directly, NOT `({ payload })`. (Entity handlers DO use `({ payload })`.)
+- `Entity.toLayer` HandlerServices type currently leaks `CurrentAddress` into Layer R — workaround documented in `apps/api/src/main.ts`.
+- pnpm dedup creates multiple drizzle-orm installs unless `pnpm-workspace.yaml` `overrides: { drizzle-orm: ^0.45.2 }` is set.
+- drizzle-kit `generate --custom` resets the SQL file on regeneration — re-write content after running it.
 
 ---
 

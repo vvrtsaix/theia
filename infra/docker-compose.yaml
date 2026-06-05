@@ -21,7 +21,8 @@ services:
       retries: 20
 
   otel-collector:
-    image: otel/opentelemetry-collector-contrib:0.115.0
+    # Bumped after 0.115.0 was pulled from Docker Hub.
+    image: otel/opentelemetry-collector-contrib:0.130.0
     container_name: theia-otel
     command: ["--config=/etc/otel-collector.yaml"]
     volumes:
@@ -34,7 +35,9 @@ services:
         condition: service_started
 
   jaeger:
-    image: jaegertracing/all-in-one:1.62
+    # Jaeger v1 all-in-one with native OTLP receivers. Tag bumped after
+    # 1.62 was pulled from Docker Hub — pin to the current v1 line.
+    image: jaegertracing/all-in-one:1.65.0
     container_name: theia-jaeger
     environment:
       COLLECTOR_OTLP_ENABLED: "true"

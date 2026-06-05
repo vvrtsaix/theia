@@ -7,7 +7,8 @@
     "#app": "./src/app.tsx",
     "#auth/*": "./src/auth/*.ts",
     "#routes/*": "./src/routes/*.tsx",
-    "#lib/*": "./src/lib/*.ts"
+    "#lib/*": "./src/lib/*.ts",
+    "#lib/effect-form": "./src/lib/effect-form.ts"
   },
   "scripts": {
     "dev": "vite",
@@ -25,6 +26,7 @@
     "lucide-solid": "catalog:",
     "solid-transition-group": "catalog:",
     "@solid-primitives/event-listener": "catalog:",
+    "@modular-forms/solid": "catalog:",
     "better-auth": "catalog:",
     "effect": "catalog:"
   },
