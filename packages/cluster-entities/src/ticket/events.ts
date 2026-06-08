@@ -1,14 +1,11 @@
-import { Effect } from "effect"
 import { Schema as DbSchema, type DrizzleTx } from "@theia/db"
-import { Errors, Events } from "@theia/domain"
+import { Errors, type Events } from "@theia/domain"
+import { Effect } from "effect"
 
 type TicketEvent = Events.TicketEvent
 
 /** Append a single event to `ticket_event`. Returns the persisted row id. */
-export const appendEvent = (
-  tx: DrizzleTx,
-  event: TicketEvent,
-) =>
+export const appendEvent = (tx: DrizzleTx, event: TicketEvent) =>
   Effect.tryPromise({
     try: async () => {
       const rows = await tx
@@ -23,7 +20,7 @@ export const appendEvent = (
           occurredAt: new Date(event.occurredAt as unknown as string),
         })
         .returning({ id: DbSchema.ticketEvents.id })
-      return rows[0]!.id
+      return rows[0]?.id
     },
     catch: (e) =>
       new Errors.InfrastructureError({

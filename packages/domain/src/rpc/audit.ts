@@ -1,11 +1,6 @@
 import { Schema } from "effect"
 import { Rpc, RpcGroup } from "effect/unstable/rpc"
-import {
-  Forbidden,
-  InfrastructureError,
-  NoActiveTenant,
-  Unauthorized,
-} from "#errors"
+import { Forbidden, InfrastructureError, NoActiveTenant, Unauthorized } from "#errors"
 import { TicketEvent } from "#events/ticket"
 import { TicketId } from "#ids"
 

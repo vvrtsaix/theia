@@ -1,3 +1,4 @@
+import type { TicketEvent } from "@theia/domain/events"
 import { sql } from "drizzle-orm"
 import {
   index,
@@ -9,7 +10,6 @@ import {
   timestamp,
   uuid,
 } from "drizzle-orm/pg-core"
-import type { TicketEvent } from "@theia/domain/events"
 import { organizations, users } from "#schema/auth"
 
 /**
@@ -24,9 +24,7 @@ import { organizations, users } from "#schema/auth"
 export const tickets = pgTable(
   "ticket",
   {
-    id: uuid()
-      .primaryKey()
-      .default(sql`uuidv7()`),
+    id: uuid().primaryKey().default(sql`uuidv7()`),
     tenantId: uuid()
       .notNull()
       .references(() => organizations.id, { onDelete: "cascade" }),
@@ -116,9 +114,7 @@ export const ticketParticipants = pgTable(
 export const ticketEvents = pgTable(
   "ticket_event",
   {
-    id: uuid()
-      .primaryKey()
-      .default(sql`uuidv7()`),
+    id: uuid().primaryKey().default(sql`uuidv7()`),
     ticketId: uuid()
       .notNull()
       .references(() => tickets.id, { onDelete: "cascade" }),

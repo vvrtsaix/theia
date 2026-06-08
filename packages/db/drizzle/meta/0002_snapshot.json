@@ -95,13 +95,9 @@
         "account_user_id_user_id_fk": {
           "name": "account_user_id_user_id_fk",
           "tableFrom": "account",
-          "columnsFrom": [
-            "user_id"
-          ],
+          "columnsFrom": ["user_id"],
           "tableTo": "user",
-          "columnsTo": [
-            "id"
-          ],
+          "columnsTo": ["id"],
           "onUpdate": "no action",
           "onDelete": "cascade"
         }
@@ -166,26 +162,18 @@
         "invitation_organization_id_organization_id_fk": {
           "name": "invitation_organization_id_organization_id_fk",
           "tableFrom": "invitation",
-          "columnsFrom": [
-            "organization_id"
-          ],
+          "columnsFrom": ["organization_id"],
           "tableTo": "organization",
-          "columnsTo": [
-            "id"
-          ],
+          "columnsTo": ["id"],
           "onUpdate": "no action",
           "onDelete": "cascade"
         },
         "invitation_inviter_id_user_id_fk": {
           "name": "invitation_inviter_id_user_id_fk",
           "tableFrom": "invitation",
-          "columnsFrom": [
-            "inviter_id"
-          ],
+          "columnsFrom": ["inviter_id"],
           "tableTo": "user",
-          "columnsTo": [
-            "id"
-          ],
+          "columnsTo": ["id"],
           "onUpdate": "no action",
           "onDelete": "cascade"
         }
@@ -238,26 +226,18 @@
         "member_user_id_user_id_fk": {
           "name": "member_user_id_user_id_fk",
           "tableFrom": "member",
-          "columnsFrom": [
-            "user_id"
-          ],
+          "columnsFrom": ["user_id"],
           "tableTo": "user",
-          "columnsTo": [
-            "id"
-          ],
+          "columnsTo": ["id"],
           "onUpdate": "no action",
           "onDelete": "cascade"
         },
         "member_organization_id_organization_id_fk": {
           "name": "member_organization_id_organization_id_fk",
           "tableFrom": "member",
-          "columnsFrom": [
-            "organization_id"
-          ],
+          "columnsFrom": ["organization_id"],
           "tableTo": "organization",
-          "columnsTo": [
-            "id"
-          ],
+          "columnsTo": ["id"],
           "onUpdate": "no action",
           "onDelete": "cascade"
         }
@@ -317,13 +297,9 @@
         "organization_role_organization_id_organization_id_fk": {
           "name": "organization_role_organization_id_organization_id_fk",
           "tableFrom": "organization_role",
-          "columnsFrom": [
-            "organization_id"
-          ],
+          "columnsFrom": ["organization_id"],
           "tableTo": "organization",
-          "columnsTo": [
-            "id"
-          ],
+          "columnsTo": ["id"],
           "onUpdate": "no action",
           "onDelete": "cascade"
         }
@@ -390,9 +366,7 @@
       "uniqueConstraints": {
         "organization_slug_unique": {
           "name": "organization_slug_unique",
-          "columns": [
-            "slug"
-          ],
+          "columns": ["slug"],
           "nullsNotDistinct": false
         }
       },
@@ -467,13 +441,9 @@
         "session_user_id_user_id_fk": {
           "name": "session_user_id_user_id_fk",
           "tableFrom": "session",
-          "columnsFrom": [
-            "user_id"
-          ],
+          "columnsFrom": ["user_id"],
           "tableTo": "user",
-          "columnsTo": [
-            "id"
-          ],
+          "columnsTo": ["id"],
           "onUpdate": "no action",
           "onDelete": "cascade"
         }
@@ -482,9 +452,7 @@
       "uniqueConstraints": {
         "session_token_unique": {
           "name": "session_token_unique",
-          "columns": [
-            "token"
-          ],
+          "columns": ["token"],
           "nullsNotDistinct": false
         }
       },
@@ -556,9 +524,7 @@
       "uniqueConstraints": {
         "user_email_unique": {
           "name": "user_email_unique",
-          "columns": [
-            "email"
-          ],
+          "columns": ["email"],
           "nullsNotDistinct": false
         }
       },
@@ -653,13 +619,9 @@
         "system_config_updated_by_user_id_fk": {
           "name": "system_config_updated_by_user_id_fk",
           "tableFrom": "system_config",
-          "columnsFrom": [
-            "updated_by"
-          ],
+          "columnsFrom": ["updated_by"],
           "tableTo": "user",
-          "columnsTo": [
-            "id"
-          ],
+          "columnsTo": ["id"],
           "onUpdate": "no action",
           "onDelete": "set null"
         }
@@ -741,13 +703,9 @@
         "workflow_tenant_id_organization_id_fk": {
           "name": "workflow_tenant_id_organization_id_fk",
           "tableFrom": "workflow",
-          "columnsFrom": [
-            "tenant_id"
-          ],
+          "columnsFrom": ["tenant_id"],
           "tableTo": "organization",
-          "columnsTo": [
-            "id"
-          ],
+          "columnsTo": ["id"],
           "onUpdate": "no action",
           "onDelete": "cascade"
         }
@@ -855,26 +813,18 @@
         "ticket_event_ticket_id_ticket_id_fk": {
           "name": "ticket_event_ticket_id_ticket_id_fk",
           "tableFrom": "ticket_event",
-          "columnsFrom": [
-            "ticket_id"
-          ],
+          "columnsFrom": ["ticket_id"],
           "tableTo": "ticket",
-          "columnsTo": [
-            "id"
-          ],
+          "columnsTo": ["id"],
           "onUpdate": "no action",
           "onDelete": "cascade"
         },
         "ticket_event_tenant_id_organization_id_fk": {
           "name": "ticket_event_tenant_id_organization_id_fk",
           "tableFrom": "ticket_event",
-          "columnsFrom": [
-            "tenant_id"
-          ],
+          "columnsFrom": ["tenant_id"],
           "tableTo": "organization",
-          "columnsTo": [
-            "id"
-          ],
+          "columnsTo": ["id"],
           "onUpdate": "no action",
           "onDelete": "cascade"
         }
@@ -978,39 +928,27 @@
         "ticket_participant_ticket_id_ticket_id_fk": {
           "name": "ticket_participant_ticket_id_ticket_id_fk",
           "tableFrom": "ticket_participant",
-          "columnsFrom": [
-            "ticket_id"
-          ],
+          "columnsFrom": ["ticket_id"],
           "tableTo": "ticket",
-          "columnsTo": [
-            "id"
-          ],
+          "columnsTo": ["id"],
           "onUpdate": "no action",
           "onDelete": "cascade"
         },
         "ticket_participant_user_id_user_id_fk": {
           "name": "ticket_participant_user_id_user_id_fk",
           "tableFrom": "ticket_participant",
-          "columnsFrom": [
-            "user_id"
-          ],
+          "columnsFrom": ["user_id"],
           "tableTo": "user",
-          "columnsTo": [
-            "id"
-          ],
+          "columnsTo": ["id"],
           "onUpdate": "no action",
           "onDelete": "cascade"
         },
         "ticket_participant_tenant_id_organization_id_fk": {
           "name": "ticket_participant_tenant_id_organization_id_fk",
           "tableFrom": "ticket_participant",
-          "columnsFrom": [
-            "tenant_id"
-          ],
+          "columnsFrom": ["tenant_id"],
           "tableTo": "organization",
-          "columnsTo": [
-            "id"
-          ],
+          "columnsTo": ["id"],
           "onUpdate": "no action",
           "onDelete": "cascade"
         }
@@ -1018,10 +956,7 @@
       "compositePrimaryKeys": {
         "ticket_participant_ticket_id_user_id_pk": {
           "name": "ticket_participant_ticket_id_user_id_pk",
-          "columns": [
-            "ticket_id",
-            "user_id"
-          ]
+          "columns": ["ticket_id", "user_id"]
         }
       },
       "uniqueConstraints": {},
@@ -1086,26 +1021,18 @@
         "ticket_tag_assignment_ticket_id_ticket_id_fk": {
           "name": "ticket_tag_assignment_ticket_id_ticket_id_fk",
           "tableFrom": "ticket_tag_assignment",
-          "columnsFrom": [
-            "ticket_id"
-          ],
+          "columnsFrom": ["ticket_id"],
           "tableTo": "ticket",
-          "columnsTo": [
-            "id"
-          ],
+          "columnsTo": ["id"],
           "onUpdate": "no action",
           "onDelete": "cascade"
         },
         "ticket_tag_assignment_tenant_id_organization_id_fk": {
           "name": "ticket_tag_assignment_tenant_id_organization_id_fk",
           "tableFrom": "ticket_tag_assignment",
-          "columnsFrom": [
-            "tenant_id"
-          ],
+          "columnsFrom": ["tenant_id"],
           "tableTo": "organization",
-          "columnsTo": [
-            "id"
-          ],
+          "columnsTo": ["id"],
           "onUpdate": "no action",
           "onDelete": "cascade"
         }
@@ -1113,10 +1040,7 @@
       "compositePrimaryKeys": {
         "ticket_tag_assignment_ticket_id_tag_pk": {
           "name": "ticket_tag_assignment_ticket_id_tag_pk",
-          "columns": [
-            "ticket_id",
-            "tag"
-          ]
+          "columns": ["ticket_id", "tag"]
         }
       },
       "uniqueConstraints": {},
@@ -1281,39 +1205,27 @@
         "ticket_tenant_id_organization_id_fk": {
           "name": "ticket_tenant_id_organization_id_fk",
           "tableFrom": "ticket",
-          "columnsFrom": [
-            "tenant_id"
-          ],
+          "columnsFrom": ["tenant_id"],
           "tableTo": "organization",
-          "columnsTo": [
-            "id"
-          ],
+          "columnsTo": ["id"],
           "onUpdate": "no action",
           "onDelete": "cascade"
         },
         "ticket_assignee_id_user_id_fk": {
           "name": "ticket_assignee_id_user_id_fk",
           "tableFrom": "ticket",
-          "columnsFrom": [
-            "assignee_id"
-          ],
+          "columnsFrom": ["assignee_id"],
           "tableTo": "user",
-          "columnsTo": [
-            "id"
-          ],
+          "columnsTo": ["id"],
           "onUpdate": "no action",
           "onDelete": "set null"
         },
         "ticket_reporter_id_user_id_fk": {
           "name": "ticket_reporter_id_user_id_fk",
           "tableFrom": "ticket",
-          "columnsFrom": [
-            "reporter_id"
-          ],
+          "columnsFrom": ["reporter_id"],
           "tableTo": "user",
-          "columnsTo": [
-            "id"
-          ],
+          "columnsTo": ["id"],
           "onUpdate": "no action",
           "onDelete": "restrict"
         }
@@ -1446,52 +1358,36 @@
         "notification_tenant_id_organization_id_fk": {
           "name": "notification_tenant_id_organization_id_fk",
           "tableFrom": "notification",
-          "columnsFrom": [
-            "tenant_id"
-          ],
+          "columnsFrom": ["tenant_id"],
           "tableTo": "organization",
-          "columnsTo": [
-            "id"
-          ],
+          "columnsTo": ["id"],
           "onUpdate": "no action",
           "onDelete": "cascade"
         },
         "notification_recipient_id_user_id_fk": {
           "name": "notification_recipient_id_user_id_fk",
           "tableFrom": "notification",
-          "columnsFrom": [
-            "recipient_id"
-          ],
+          "columnsFrom": ["recipient_id"],
           "tableTo": "user",
-          "columnsTo": [
-            "id"
-          ],
+          "columnsTo": ["id"],
           "onUpdate": "no action",
           "onDelete": "cascade"
         },
         "notification_ticket_id_ticket_id_fk": {
           "name": "notification_ticket_id_ticket_id_fk",
           "tableFrom": "notification",
-          "columnsFrom": [
-            "ticket_id"
-          ],
+          "columnsFrom": ["ticket_id"],
           "tableTo": "ticket",
-          "columnsTo": [
-            "id"
-          ],
+          "columnsTo": ["id"],
           "onUpdate": "no action",
           "onDelete": "cascade"
         },
         "notification_event_id_ticket_event_id_fk": {
           "name": "notification_event_id_ticket_event_id_fk",
           "tableFrom": "notification",
-          "columnsFrom": [
-            "event_id"
-          ],
+          "columnsFrom": ["event_id"],
           "tableTo": "ticket_event",
-          "columnsTo": [
-            "id"
-          ],
+          "columnsTo": ["id"],
           "onUpdate": "no action",
           "onDelete": "cascade"
         }

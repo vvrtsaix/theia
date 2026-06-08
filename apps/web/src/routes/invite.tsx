@@ -1,5 +1,5 @@
 import { A, useNavigate, useParams } from "@solidjs/router"
-import { type Component, Show, createResource } from "solid-js"
+import { type Component, createResource, Show } from "solid-js"
 import { authClient } from "#auth/client"
 
 /**

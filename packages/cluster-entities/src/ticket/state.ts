@@ -1,7 +1,7 @@
-import { Effect, Schema } from "effect"
-import { eq } from "drizzle-orm"
 import { Schema as DbSchema, type DrizzleTx } from "@theia/db"
-import { Entities, Errors, type TicketId, type TenantId } from "@theia/domain"
+import { Entities, Errors, type TenantId, type TicketId } from "@theia/domain"
+import { eq } from "drizzle-orm"
+import { Effect, Schema } from "effect"
 
 /**
  * In-memory state held by the `TicketEntity` actor between messages. The

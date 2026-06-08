@@ -1,8 +1,8 @@
-import { describe, expect, it } from "vitest"
+import * as DbSchema from "@theia/db/schema"
+import { Entities } from "@theia/domain"
 import { getTableColumns } from "drizzle-orm"
 import { Schema } from "effect"
-import { Entities } from "@theia/domain"
-import * as DbSchema from "@theia/db/schema"
+import { describe, expect, it } from "vitest"
 
 /**
  * Domain ↔ DB parity.
@@ -58,9 +58,7 @@ describe("domain ↔ db parity", () => {
     it(`${p.name}: all domain fields exist in db`, () => {
       const domainKeys = domainFields(p.domain as never)
       const dbKeys = new Set(dbColumnNames(p.db))
-      const missing = domainKeys.filter(
-        (k) => !dbKeys.has(k) && !p.domainOnly.includes(k as never),
-      )
+      const missing = domainKeys.filter((k) => !dbKeys.has(k) && !p.domainOnly.includes(k as never))
       expect(missing, `domain fields missing from db: ${missing.join(", ")}`).toEqual([])
     })
 

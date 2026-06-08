@@ -3,9 +3,10 @@
   "compilerOptions": {
     "rootDir": "src",
     "outDir": "dist",
-    "noEmit": false,
+    "noEmit": true,
     "composite": false,
-    "types": ["bun"]
+    "allowImportingTsExtensions": true,
+    "types": ["node"]
   },
   "include": ["src/**/*"]
 }

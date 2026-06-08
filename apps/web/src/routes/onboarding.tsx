@@ -1,5 +1,5 @@
 import { A, useNavigate } from "@solidjs/router"
-import { type Component, Show, createResource } from "solid-js"
+import { type Component, createResource, Show } from "solid-js"
 import { authClient } from "#auth/client"
 
 /**
@@ -23,11 +23,11 @@ const Onboarding: Component = () => {
   const checkAndRedirect = async (): Promise<void> => {
     const list = orgs()?.data
     if (!list || list.length === 0) return
-    await authClient.organization.setActive({ organizationId: list[0]!.id })
+    await authClient.organization.setActive({ organizationId: list[0]?.id })
     nav("/", { replace: true })
   }
   if (typeof window !== "undefined") {
-    checkAndRedirect()
+    void checkAndRedirect()
   }
 
   return (

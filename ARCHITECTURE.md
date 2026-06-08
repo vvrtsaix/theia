@@ -12,7 +12,7 @@ Architecture plan. Effect-TS v4 (effect-smol) + SolidJS SPA + Postgres 18 + Open
 | Frontend           | Solid SPA + `effect/unstable/rpc` (no SSR)                 |
 | Cluster posture    | Single-node MVP, Cluster + Actor APIs wired from day one   |
 | Auth               | `better-auth` (with Drizzle adapter + organizations plugin)|
-| Backend runtime    | Bun (Node fallback supported)                              |
+| Backend runtime    | Node 24 LTS (native TS execution, no flag)                 |
 | DB                 | Postgres 18 (native `uuidv7()` for time-ordered keys)      |
 | Schema/migrations  | Drizzle (chosen for better-auth adapter compatibility)     |
 | DB driver          | `postgres-js` directly (NOT `@effect/sql-pg`)              |
@@ -66,7 +66,7 @@ v4 collapses most former `@effect/*` packages into the `effect` mega-package und
 | `effect/unstable/http`                          | `HttpRouter`, `HttpServer`, `HttpClient`, `FetchHttpClient` (client transport) |
 | `effect/unstable/httpapi`                       | `HttpApi`, `HttpApiGroup`, `HttpApiEndpoint`, `OpenApi` _(not used yet)_     |
 | `effect/unstable/sql`                           | `SqlClient`, `Statement` _(not used — Drizzle owns SQL in this codebase)_   |
-| `@effect/platform-bun`                          | `BunRuntime`, `BunClusterSocket`, Bun HTTP server adapter                    |
+| `@effect/platform-node`                         | `NodeRuntime`, `NodeClusterSocket`, Node HTTP server adapter                 |
 | `@effect/opentelemetry`                         | `NodeSdk.layer` for OTel SDK                                                 |
 | `@effect/vitest` (dev)                          | `it.effect`, `it.scoped`, `TestClock`-friendly test helpers                  |
 | `drizzle-orm`                                   | Type-safe SQL builder + schema mapping                                       |
@@ -110,7 +110,7 @@ import { Schema } from "effect"   // ✅ v4
 ```
 theia/
 ├── apps/
-│   ├── api/                   # Bun entrypoint — wires DB + Cluster + OTel (HTTP TBD Phase 7.x)
+│   ├── api/                   # Node entrypoint — wires DB + Cluster + OTel + HTTP server
 │   └── web/                   # Solid SPA (Vite)
 ├── packages/
 │   ├── domain/                # Schemas, errors, events, RPC groups, cluster messages
@@ -279,7 +279,7 @@ Effect side (`packages/auth/src/middleware.ts`) — `resolveSession(headers)` re
 
 `CurrentSession.activeOrganizationId` is what `Database.tx` binds as `app.tenant_id` for RLS.
 
-> **Verify on integration (Phase 7.x):** confirm the exact HTTP adapter path for mounting `auth.handler` under `/api/auth/*` once the `effect/unstable/http` API stabilises.
+`auth.handler` is mounted under `/api/auth/*` via `AuthHandlerLive` in `apps/api/src/auth-handler.ts`.
 
 ---
 
@@ -301,7 +301,7 @@ Each handler: open `Database.txAs(tenantId, async tx => ...)` → load ticket+ta
 
 ### Storage (current)
 
-`TestRunner.layer` (in-memory, single-process). Wired in `packages/cluster-entities/src/runtime.ts`. Production swap point flagged — `ClusterProdLive` will use a Bun/Node cluster socket layer + Pg-backed `MessageStorage` / `RunnerStorage`.
+`TestRunner.layer` (in-memory, single-process). Wired in `packages/cluster-entities/src/runtime.ts`. Production swap point flagged — `ClusterProdLive` will use `NodeClusterSocket` layer + Pg-backed `MessageStorage` / `RunnerStorage`.
 
 ### Actor wiring (current code)
 
@@ -364,7 +364,7 @@ Server (`packages/rpc-server`) — handlers go through `Database.tx` (RLS-bound)
 
 Client (`packages/rpc-client`) — `RpcClient.make(group)` per group + `layerProtocolHttp({ url })` + `FetchHttpClient.layer` + JSON serialization. Wrapped in one `ManagedRuntime` per SPA process.
 
-Transport: HTTP (mounted at `/rpc/<group>` once Phase 7.x lands). Stream RPCs use HTTP chunked / SSE.
+Transport: HTTP, mounted at `/rpc/<group>` (`packages/rpc-server/src/http.ts`). Stream RPCs use HTTP chunked / SSE.
 
 ---
 
@@ -395,20 +395,21 @@ Add custom spans inside handlers with `Effect.withSpan("ticket.open", { attribut
 ## Layer composition (current `apps/api/src/main.ts`)
 
 ```ts
-const AppLive: Layer.Layer<never, unknown, never> = ClusterTestLive.pipe(
-  Layer.provide(DatabaseLive),
+const HttpLive = HttpRouter.serve(Layer.mergeAll(RpcServerLive, AuthHandlerLive)).pipe(
+  Layer.provide(NodeHttpServer.layer({ port: 3000 })),
+)
+
+const AppLive: Layer.Layer<never, unknown, never> = HttpLive.pipe(
+  Layer.provide(ClusterTestLive),
+  Layer.provide(EventChannelLive),
+  Layer.provideMerge(DatabaseLive),
   Layer.provide(OtelLive),
 ) as unknown as Layer.Layer<never, unknown, never>
 
-const program = Effect.gen(function* () {
-  yield* Effect.logInfo("theia api: layers built; waiting for HTTP wiring (Phase 7.x)")
-  yield* Effect.never
-}).pipe(Effect.provide(AppLive)) as Effect.Effect<never, unknown, never>
-
-BunRuntime.runMain(program)
+NodeRuntime.runMain(program)
 ```
 
-The cast unblocks the build pending the effect-smol `Entity.toLayer` fix. HTTP server + RPC mount + better-auth handler land in Phase 7.x.
+The cast unblocks the build pending the effect-smol `Entity.toLayer` fix (`CurrentAddress` leaks into Layer R).
 
 ---
 
@@ -439,7 +440,7 @@ apps/web/
 
 State: Solid signals + `createResource` for one-shot queries. RPC stream subscriptions (Phase 6.x): `createResource` + AbortController, or `@effect/atom-solid` for atom-based reactivity.
 
-No SSR — auth-gated SPA. Static assets served by the Bun HTTP server in prod (Phase 7.x) or a CDN.
+No SSR — auth-gated SPA. Static assets served by Vite in dev; CDN or reverse proxy in prod.
 
 ---
 
@@ -488,7 +489,7 @@ import { Ticket } from "@theia/domain/entities"
 1. **Never** use `../*.js` or `./*.js` for cross-directory imports inside a package — use `#name`.
 2. Same-directory imports (`./Sibling.ts`) are fine.
 3. Every new package gets its own `imports` map covering every top-level src directory.
-4. Tooling: TS `NodeNext` resolution + Bun + Node 18+ all resolve `#x` natively.
+4. Tooling: TS `NodeNext` resolution + Node 24 LTS resolve `#x` natively.
 
 ---
 
@@ -543,20 +544,19 @@ domain  ──→  (depends only on `effect`)
 | 1     | Domain contracts: entities, errors, events, RPC groups, cluster messages | ✅ done |
 | 2     | Postgres 18 + Drizzle schema + RLS bootstrap + domain↔db parity test     | ✅ done |
 | 3     | better-auth + organizations + Effect `CurrentSession` middleware         | ✅ done |
-| 4     | `effect/unstable/rpc` server: handlers + per-group HTTP layer            | ✅ done (compiles; HTTP mount pending Phase 7.x) |
-| 5     | Cluster + `TicketEntity` Behavior + event log table                      | ✅ done (TestRunner; Pg storage = Phase 5.x) |
-| 6     | Solid SPA: `rpc-client` + auth + ticket list/detail + `modular-forms` (login)| ✅ done (atom-solid reactive session binding = Phase 6.x) |
-| 7     | OpenTelemetry + local Jaeger + `apps/api` HTTP server                    | 🟡 OTel done; HTTP server wiring = Phase 7.x |
-| 8     | Real-time: entity event Stream → RPC stream → Solid signals              | 🟡 in-memory channel + Pg LISTEN/NOTIFY triggers wired; Stream consumer = Phase 8.x |
-| 9     | Polish: pg_trgm search + bulk ops + audit log                            | 🟡 contracts + migrations done; handler impls = Phase 9.x |
+| 4     | `effect/unstable/rpc` server: handlers + per-group HTTP layer            | ✅ done |
+| 5     | Cluster + `TicketEntity` Behavior + event log table                      | ✅ done (TestRunner; prod cluster socket deferred) |
+| 6     | Solid SPA: `rpc-client` + auth + ticket list/detail + `modular-forms` (login)| ✅ done (atom-solid reactive session binding deferred) |
+| 7     | OpenTelemetry + local Jaeger + `apps/api` HTTP server                    | ✅ done (per-RPC-group spans + 500 boundary) |
+| 8     | Real-time: entity event Stream → RPC stream → Solid signals              | ✅ done server-side (`EventChannel` PubSub via Pg `LISTEN`); web-side consumer deferred |
+| 9     | Polish: pg_trgm search + bulk ops + audit log                            | ✅ done |
 
-### Current boundary (Phase 7.x → 9.x slices)
+### Deferred work
 
-- **Phase 7.x:** `apps/api/src/main.ts` mounts `BunHttpServer` + `RpcServer.layerHttp` per group + `auth.handler` at `/api/auth/*`. Blocker: `effect/unstable/http` API still moving between betas.
-- **Phase 5.x:** `ticket.open` RPC handler currently dies — needs to construct a fresh `<tenantId>:<ticketId>` address and forward to `TicketEntity.client`.
-- **Phase 8.x:** Pg-backed `EventChannel` consuming `LISTEN ticket_event_inserted` via `postgres-js` `listen()`.
-- **Phase 6.x:** workflow editor + ticket create dialog forms (login already wired with `modular-forms` + Effect Schema via `effectSchema` adapter); `@effect/atom-solid` reactive session binding.
-- **Phase 9.x:** real handler impls for `ticket.search`, `ticket.bulk*`, `audit.list`.
+- **Prod cluster runtime:** `NodeClusterSocket.layer()` + `@effect/sql-pg` `MessageStorage` / `RunnerStorage` for multi-node. `TestRunner` covers dev.
+- **Notification delivery transport:** email / webhook sink. Event log + in-app stream exist; no external delivery.
+- **Web-side reactive bindings:** `@effect/atom-solid` session binding + rpc-client streaming consumers (`ticket.events`, `notification.stream`) wired to Solid signals.
+- **Integration tests:** beyond the Drizzle parity test.
 
 ---
 

@@ -2,7 +2,7 @@ import { A, useParams } from "@solidjs/router"
 import { TicketId } from "@theia/domain"
 import { DateTime, Schema } from "effect"
 import { ArrowLeft } from "lucide-solid"
-import { type Component, For, type JSX, Show, createResource } from "solid-js"
+import { type Component, createResource, For, type JSX, Show } from "solid-js"
 import { getClients, run } from "#lib/rpc"
 
 /**

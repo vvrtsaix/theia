@@ -2,12 +2,7 @@ import { Schema } from "effect"
 import { ClusterSchema, Entity } from "effect/unstable/cluster"
 import { Rpc } from "effect/unstable/rpc"
 import { TicketParticipant } from "#entities/Participant"
-import {
-  Ticket,
-  TicketPriority,
-  TicketTag,
-  TicketType,
-} from "#entities/Ticket"
+import { Ticket, TicketPriority, TicketTag, TicketType } from "#entities/Ticket"
 import {
   AlreadySubscribed,
   InfrastructureError,

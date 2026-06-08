@@ -6,12 +6,9 @@ import { Schema } from "effect"
  * we get that far.
  */
 
-export class SessionInvalid extends Schema.TaggedErrorClass<SessionInvalid>()(
-  "SessionInvalid",
-  {
-    reason: Schema.String,
-  },
-) {}
+export class SessionInvalid extends Schema.TaggedErrorClass<SessionInvalid>()("SessionInvalid", {
+  reason: Schema.String,
+}) {}
 
 export class NoActiveOrganization extends Schema.TaggedErrorClass<NoActiveOrganization>()(
   "NoActiveOrganization",

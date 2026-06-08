@@ -15,9 +15,7 @@ import { ticketEvents, tickets } from "#schema/ticket"
 export const notifications = pgTable(
   "notification",
   {
-    id: uuid()
-      .primaryKey()
-      .default(sql`uuidv7()`),
+    id: uuid().primaryKey().default(sql`uuidv7()`),
     tenantId: uuid()
       .notNull()
       .references(() => organizations.id, { onDelete: "cascade" }),

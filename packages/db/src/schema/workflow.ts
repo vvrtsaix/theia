@@ -1,6 +1,6 @@
+import type { Workflow as DomainWorkflow } from "@theia/domain/entities"
 import { sql } from "drizzle-orm"
 import { jsonb, pgTable, timestamp, uuid } from "drizzle-orm/pg-core"
-import type { Workflow as DomainWorkflow } from "@theia/domain/entities"
 import { organizations } from "#schema/auth"
 
 /**
@@ -17,29 +17,13 @@ export const workflows = pgTable("workflow", {
   tenantId: uuid()
     .primaryKey()
     .references(() => organizations.id, { onDelete: "cascade" }),
-  statuses: jsonb()
-    .$type<ReadonlyArray<DomainWorkflow["statuses"][number]>>()
-    .notNull(),
-  priorities: jsonb()
-    .$type<ReadonlyArray<DomainWorkflow["priorities"][number]>>()
-    .notNull(),
-  transitions: jsonb()
-    .$type<ReadonlyArray<DomainWorkflow["transitions"][number]>>()
-    .notNull(),
-  types: jsonb()
-    .$type<ReadonlyArray<DomainWorkflow["types"][number]>>()
-    .notNull(),
-  tags: jsonb()
-    .$type<ReadonlyArray<DomainWorkflow["tags"][number]>>()
-    .notNull(),
-  defaultStatus: jsonb()
-    .$type<DomainWorkflow["defaultStatus"]>()
-    .notNull(),
-  defaultPriority: jsonb()
-    .$type<DomainWorkflow["defaultPriority"]>()
-    .notNull(),
+  statuses: jsonb().$type<ReadonlyArray<DomainWorkflow["statuses"][number]>>().notNull(),
+  priorities: jsonb().$type<ReadonlyArray<DomainWorkflow["priorities"][number]>>().notNull(),
+  transitions: jsonb().$type<ReadonlyArray<DomainWorkflow["transitions"][number]>>().notNull(),
+  types: jsonb().$type<ReadonlyArray<DomainWorkflow["types"][number]>>().notNull(),
+  tags: jsonb().$type<ReadonlyArray<DomainWorkflow["tags"][number]>>().notNull(),
+  defaultStatus: jsonb().$type<DomainWorkflow["defaultStatus"]>().notNull(),
+  defaultPriority: jsonb().$type<DomainWorkflow["defaultPriority"]>().notNull(),
   defaultTypeKey: jsonb().$type<DomainWorkflow["defaultTypeKey"]>(),
-  updatedAt: timestamp({ withTimezone: true, mode: "date" })
-    .notNull()
-    .default(sql`now()`),
+  updatedAt: timestamp({ withTimezone: true, mode: "date" }).notNull().default(sql`now()`),
 })

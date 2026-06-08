@@ -2,13 +2,13 @@ import { A, useNavigate } from "@solidjs/router"
 import { Check, ChevronsUpDown, LogOut, Plus } from "lucide-solid"
 import {
   type Component,
-  For,
-  Show,
   createEffect,
   createMemo,
   createResource,
   createSignal,
+  For,
   onCleanup,
+  Show,
 } from "solid-js"
 import { authClient } from "#auth/client"
 import { useSession } from "#auth/session"

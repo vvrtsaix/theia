@@ -18,9 +18,9 @@
   "scripts": {
     "build": "tsc -b",
     "typecheck": "tsc -b --noEmit",
-    "generate": "dotenv -e ../../.env.local -- drizzle-kit generate",
-    "migrate": "dotenv -e ../../.env.local -- drizzle-kit migrate",
-    "studio": "dotenv -e ../../.env.local -- drizzle-kit studio",
+    "generate": "drizzle-kit generate",
+    "migrate": "drizzle-kit migrate",
+    "studio": "drizzle-kit studio",
     "test": "vitest run"
   },
   "dependencies": {

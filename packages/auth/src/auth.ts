@@ -127,6 +127,25 @@ export const auth = betterAuth({
     requireEmailVerification: false,
   },
 
+  /**
+   * Rate limit auth-mutation routes. Defaults are conservative — production
+   * should swap `storage: "memory"` for Redis (or any external KV) so the
+   * counter survives restarts and is shared across replicas. `customRules`
+   * tightens the sign-in path to 5 attempts per IP per minute; everything
+   * else inherits the default window.
+   */
+  rateLimit: {
+    enabled: true,
+    storage: "memory",
+    window: 60,
+    max: 30,
+    customRules: {
+      "/sign-in/email": { window: 60, max: 5 },
+      "/sign-up/email": { window: 60, max: 5 },
+      "/forgot-password": { window: 60, max: 5 },
+    },
+  },
+
   user: {
     additionalFields: {
       /**
@@ -166,7 +185,7 @@ export const auth = betterAuth({
           process.env.BETTER_AUTH_TRUSTED_ORIGINS?.split(",")[0]?.trim() ??
           "http://localhost:5173"
         const url = `${webOrigin}/invite/${id}`
-        console.log(
+        console.warn(
           `[invite] org="${organization.name}" to=${email} role=${role} by=${inviter.user.email} → ${url}`,
         )
       },

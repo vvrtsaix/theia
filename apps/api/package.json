@@ -4,8 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "bun --env-file=../../.env.local --watch src/main.ts",
-    "start": "bun --env-file=../../.env.local src/main.ts",
+    "dev": "node --watch src/main.ts",
+    "start": "node src/main.ts",
     "typecheck": "tsc -b --noEmit"
   },
   "dependencies": {
@@ -16,12 +16,11 @@
     "@theia/cluster-entities": "workspace:*",
     "@theia/otel": "workspace:*",
     "effect": "catalog:",
-    "@effect/platform-bun": "catalog:",
+    "@effect/platform-node": "catalog:",
     "better-auth": "catalog:",
     "drizzle-orm": "catalog:"
   },
   "devDependencies": {
-    "@types/bun": "catalog:",
     "@types/node": "catalog:",
     "typescript": "catalog:"
   }

@@ -1,19 +1,41 @@
 import { A } from "@solidjs/router"
-import { type Component, For, Show, createResource } from "solid-js"
-import { getClients, run } from "#lib/rpc"
+import type { Stream } from "effect"
+import { type Component, createResource, For, onMount, Show } from "solid-js"
+import { getClients, run, subscribeStream } from "#lib/rpc"
 
 /**
  * Notifications — minimal, read-only feed.
  *
- * Pulls from `notification.list` (already implemented in the rpc-server
- * handlers). Items render as ledger rows: mono timestamp, serif title, hairline
- * unread-dot in ember. Mark-read flows land in a later slice once the
- * mutation UX is designed.
+ * Pulls from `notification.list` for the initial page; subscribes to
+ * `notification.stream` to refetch on each new notice (server stays the
+ * source of truth for ordering + read state, so we trigger a refetch
+ * rather than client-side prepending).
  */
 const Notifications: Component = () => {
-  const [data] = createResource(async () => {
+  const [data, { refetch }] = createResource(async () => {
     const c = await getClients()
     return run(c.notification["notification.list"]({}))
+  })
+
+  onMount(() => {
+    getClients()
+      .then((c) => {
+        const stream = c.notification["notification.stream"]() as unknown as Stream.Stream<
+          unknown,
+          unknown
+        >
+        subscribeStream(
+          stream,
+          (count: number) => {
+            void refetch()
+            return count + 1
+          },
+          0,
+        )
+      })
+      .catch((err) => {
+        console.warn("[notifications] failed to attach stream:", err)
+      })
   })
 
   return (
@@ -82,6 +104,7 @@ const NotificationRow: Component<{ item: NotificationItem }> = (p) => {
       class="ledger-row grid grid-cols-[12px_minmax(0,1fr)_140px] items-baseline gap-4 px-2 py-5"
     >
       <span
+        role="status"
         aria-label={unread() ? "unread" : "read"}
         class="mt-2 size-1.5 rounded-full"
         classList={{

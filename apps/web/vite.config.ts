@@ -6,7 +6,7 @@ import solid from "vite-plugin-solid"
 /**
  * Resolve the workspace root so Vite reads `.env*` files from the repo root
  * instead of `apps/web/`. Keeps a single source of truth for env config
- * across both api (Bun) and web (Vite). Only `VITE_*` keys are exposed to
+ * across both api (Node) and web (Vite). Only `VITE_*` keys are exposed to
  * client code; other vars stay server-side, which is what we want.
  */
 const WORKSPACE_ROOT = fileURLToPath(new URL("../..", import.meta.url))

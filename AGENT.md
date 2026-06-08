@@ -35,12 +35,12 @@ docker compose -f infra/docker-compose.yaml up -d
 - **Effect v4** (`effect@4.0.0-beta.78`) pinned via pnpm `catalog:` everywhere. Do NOT mix v3 + v4. Source of truth: `~/Workspaces/oss/effect-smol` (cloned). Grep there for v4 API questions — training data is unreliable for v4.
 - **Cluster, RPC, HttpApi, SQL, OTel core live in `effect/unstable/*`** — there is **no** `@effect/cluster` or `@effect/rpc` package.
 - **Postgres 18** with native `uuidv7()` for time-ordered PKs.
-- **Bun** runtime (Node 22 fallback). `@effect/vitest@beta` for tests.
+- **Node 24 LTS** runtime (native TS execution is stable — no flag needed). `@effect/vitest@beta` for tests.
 - **Drizzle ORM** pinned at `^0.45.2` via `pnpm overrides` (dedupes peer ranges across better-auth + drizzle-kit).
 
 ## Architecture — minimum viable knowledge
 
-### Contract-first
+### Contract-first — ALWAYS
 
 `packages/domain` is the **source of truth**. Schemas, errors, events, RPC groups, and cluster messages are defined there before any handler / db / UI work. Dep graph:
 
@@ -51,6 +51,8 @@ domain → db, auth, otel
 ```
 
 A feature lands as: **domain PR** (Schema + error + RPC contract + cluster message) → **impl PRs** that consume those contracts. Never the other way around.
+
+**Rule:** every new field, error, event, RPC, or cluster message starts as a `Schema.*` / `Rpc.make` / `Entity.make` in `packages/domain`. No handler, no DB column, no UI form may ship without its contract landed first. If a UI form needs a shape, derive it from the domain schema — do not invent a parallel type. Reuse domain `Schema.TaggedErrorClass` instances in UI error states.
 
 ### Multi-tenancy via RLS
 
@@ -68,7 +70,7 @@ Each long-lived stateful aggregate is an `Entity` (`effect/unstable/cluster`). A
 
 - `TicketEntity` — one actor per ticket. Address shape: `<tenantId>:<ticketId>`. Owns status state machine, atomic ticket+event+participant writes, optimistic concurrency via `version` field.
 
-State-mutating messages annotated `ClusterSchema.Persisted = true` so they survive runner crashes. Cluster runtime: `TestRunner.layer` for dev/tests; Bun/Node cluster socket + Pg-backed MessageStorage for prod.
+State-mutating messages annotated `ClusterSchema.Persisted = true` so they survive runner crashes. Cluster runtime: `TestRunner.layer` for dev/tests; `NodeClusterSocket` + Pg-backed `MessageStorage` for prod.
 
 ### RPC
 
@@ -134,6 +136,33 @@ TS `paths` is compile-only — emit preserves the alias and breaks downstream. S
 - `Scope.extend` → `Scope.provide`.
 - `Mailbox` → `Queue.Queue`.
 
+### Frontend — Kobalte + modular-forms (non-negotiable)
+
+**UI primitives: `@kobalte/core`.** Do NOT hand-roll dialogs, popovers, dropdowns, tabs, checkboxes, switches, toasts, comboboxes, tooltips, accordions, etc. — Kobalte ships unstyled, accessible primitives. Compose Kobalte parts and apply project styles. Only build a custom component when Kobalte has no equivalent; document the gap in the file header when you do.
+
+**Forms: `@modular-forms/solid` + Effect `Schema`.** Every form binds to a domain `Schema.*` shape via an Effect Schema adapter (`packages/web/src/lib/modular-forms-effect-schema.ts`-style). The form's payload type **is** the domain RPC payload type — no DTO mirrors.
+
+```ts
+// ✅ idiomatic
+import { createForm, valiForm } from "@modular-forms/solid"  // or effect adapter
+import { LoginPayload } from "@theia/domain/rpc/auth"
+
+const [form, { Form, Field }] = createForm<typeof LoginPayload.Type>({
+  validate: effectSchema(LoginPayload),
+})
+```
+
+**Why:** one schema → server validation, client validation, RPC encode/decode, and types stay in lockstep. Any drift surfaces at `pnpm typecheck`. See `apps/web/src/auth/Login.tsx` for the wired pattern.
+
+### Non-null assertions (`!`)
+
+`noNonNullAssertion` is `warn` in `biome.json`, not `error`. Permitted in two contexts only:
+
+1. **Provable invariants in state-machine code** — e.g. `rows[0]!` immediately after `if (rows.length === 0) throw …`. The control-flow already proved presence; the `!` is documentation, not coercion.
+2. **Workflow-derived defaults** — looking up a status/priority key that the workflow guarantees exists by validation.
+
+Anywhere else, prefer explicit `?? throwUnreachable("...")` or early-return guards. New code adding `!` outside these two contexts gets pushed back in review.
+
 ### Effect v4 service definition
 
 Shape goes in the **second type parameter**, not as a runtime argument:
@@ -158,18 +187,21 @@ Methods are plain TS function signatures inside the shape — not `Schema.*`. Ac
 Phases 0–9 per `ARCHITECTURE.md` are **committed**.
 
 ✅ **Works:**
-- DB schema + RLS + Workflow seed (5 migrations apply cleanly).
-- `pnpm typecheck` clean across root + apps/api + apps/web.
+- DB schema + RLS + Workflow seed + LISTEN/NOTIFY triggers (8 migrations).
+- `pnpm typecheck` clean across root + apps/api + apps/web. Lint: 0 errors.
 - Drizzle parity test 11/11.
-- Web SPA dev server renders shell + login form.
+- Web SPA dev server renders shell + login form (modular-forms + Effect Schema + Kobalte).
 - TicketEntity Behavior with 14 handlers (atomic ticket + event + participant writes).
-- OTel SDK layer via `@effect/opentelemetry` with `Config`-driven endpoint.
+- OTel SDK + per-RPC-group `Effect.withSpan` + 500-boundary cause logging in `rpc-server/src/http.ts`.
+- `NodeHttpServer` mount at `:3000`; RPC + better-auth handlers wired.
+- All RPC handlers wired (ticket, workflow, system, notification list/markRead/markAllRead/**stream**, search, bulk, audit). Cluster mutations delegate to `TicketEntity` via `<tenantId>:<ticketId>` address built from `CurrentSession`.
+- `EventChannel` service (`@theia/db`) — dedicated Pg `LISTEN` connection → `PubSub` → `Stream`. Drives `ticket.events` + `notification.stream` real-time.
 
-⚠️ **Boundary work remaining:**
-- `apps/api/src/main.ts` does NOT yet mount an HTTP server. The `effect/unstable/http` API is moving between betas; Phase 7.x wires `BunHttpServer` + `RpcServer.layerHttp` + `auth.handler`.
-- `ticket.open` RPC handler dies at runtime — caller needs to construct the `<tenantId>:<ticketId>` entity address. Phase 5.x.
-- Pg `LISTEN/NOTIFY` → `Stream` consumer for real-time `SubscribeEvents` — Phase 8.x (in-memory channel + decoder are wired).
-- Phase 9 search/bulk/audit handlers are contract-only — impls follow the same Drizzle pattern as workflow handlers.
+⚠️ **Remaining (deferred):**
+- Prod cluster runtime — `NodeClusterSocket.layer()` + `@effect/sql-pg` `MessageStorage` not yet wired. Single-node `TestRunner` covers dev.
+- Notification delivery transport (email / webhook). Event log + in-app stream exist; no external sink.
+- Integration tests beyond the Drizzle parity test.
+- Web-side rpc-client consumption of streaming endpoints (`ticket.events`, `notification.stream`).
 
 ## v4 quirks logged (workarounds in code, search for these notes if confused)
 

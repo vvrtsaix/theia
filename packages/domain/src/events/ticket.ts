@@ -1,10 +1,5 @@
 import { Schema } from "effect"
-import {
-  TicketPriority,
-  TicketStatus,
-  TicketTag,
-  TicketType,
-} from "#entities/Workflow"
+import { TicketPriority, TicketStatus, TicketTag, TicketType } from "#entities/Workflow"
 import { TenantId, TicketEventId, TicketId, UserId } from "#ids"
 
 /**

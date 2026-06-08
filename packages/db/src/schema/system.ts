@@ -1,6 +1,6 @@
+import type { SystemConfigValue } from "@theia/domain/entities"
 import { sql } from "drizzle-orm"
 import { jsonb, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core"
-import type { SystemConfigValue } from "@theia/domain/entities"
 import { users } from "#schema/auth"
 
 /**
@@ -16,8 +16,6 @@ export const systemConfig = pgTable("system_config", {
   /** Matches `value._tag` — e.g. `"workflow_defaults"`. */
   key: text().primaryKey(),
   value: jsonb().$type<SystemConfigValue>().notNull(),
-  updatedAt: timestamp({ withTimezone: true, mode: "date" })
-    .notNull()
-    .default(sql`now()`),
+  updatedAt: timestamp({ withTimezone: true, mode: "date" }).notNull().default(sql`now()`),
   updatedBy: uuid().references(() => users.id, { onDelete: "set null" }),
 })

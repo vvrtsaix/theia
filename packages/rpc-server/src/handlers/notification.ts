@@ -1,7 +1,7 @@
-import { CurrentSession, Database, Schema as DbSchema } from "@theia/db"
+import { CurrentSession, Database, Schema as DbSchema, EventChannel } from "@theia/db"
 import { Rpc as DomainRpc, Entities, Errors } from "@theia/domain"
 import { and, count, desc, eq, isNull, lt } from "drizzle-orm"
-import { DateTime, Effect, Schema } from "effect"
+import { DateTime, Effect, Schema, Stream } from "effect"
 
 /**
  * Per-user notification feed. RLS pins tenant; handler also filters by
@@ -117,8 +117,46 @@ export const NotificationHandlers = DomainRpc.NotificationRpc.toLayer({
       return { updated: updatedIds.length }
     }),
 
-  "notification.stream": () =>
-    Effect.die(
-      new Error("notification.stream wiring lives in Phase 8 (NotificationEntity push); pending"),
-    ),
+  "notification.stream": () => {
+    // Pg LISTEN/NOTIFY surfaces only `{id, recipientId}` (payload cap). On
+    // each notice for this user we fetch the full row by id — the SELECT
+    // runs inside `Database.tx`, so RLS scopes the lookup to the active
+    // tenant; cross-tenant ids cannot leak even if the notice were spoofed.
+    const build = Effect.gen(function* () {
+      const db = yield* Database
+      const channel = yield* EventChannel
+      const session = yield* CurrentSession
+      return channel.notifications.pipe(
+        Stream.filter((notice) => notice.recipientId === session.userId),
+        Stream.flatMap((notice) =>
+          Stream.unwrap(
+            db
+              .tx(async (tx) => {
+                const rows = await tx
+                  .select()
+                  .from(DbSchema.notifications)
+                  .where(eq(DbSchema.notifications.id, notice.id))
+                  .limit(1)
+                return rows[0] ?? null
+              })
+              .pipe(
+                Effect.map((row) =>
+                  row ? Stream.fromEffect(decodeNotification(row)) : Stream.empty,
+                ),
+                // Per-notice fetch failures (transient DB error, RLS shift,
+                // row deleted between notice + select) must NOT kill the
+                // long-lived subscriber stream. Log + swallow → empty stream
+                // for this notice; the next notice still flows.
+                Effect.catch((e: { message: string }) =>
+                  Effect.logWarning(
+                    `notification.stream: fetch failed for ${notice.id}: ${e.message}`,
+                  ).pipe(Effect.as(Stream.empty)),
+                ),
+              ),
+          ),
+        ),
+      )
+    })
+    return Stream.unwrap(build as never) as never
+  },
 })

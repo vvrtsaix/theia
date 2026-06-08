@@ -1,17 +1,7 @@
 import { Schema } from "effect"
 import { Rpc, RpcGroup } from "effect/unstable/rpc"
-import {
-  SystemConfig,
-  SystemConfigKey,
-  SystemConfigValue,
-} from "#entities/SystemConfig"
-import {
-  Forbidden,
-  InfrastructureError,
-  NotFound,
-  Unauthorized,
-  ValidationError,
-} from "#errors"
+import { SystemConfig, SystemConfigKey, SystemConfigValue } from "#entities/SystemConfig"
+import { Forbidden, InfrastructureError, NotFound, Unauthorized, ValidationError } from "#errors"
 
 /**
  * Super-admin (`UserKind = "system"`) only. Edits the `system_config` table

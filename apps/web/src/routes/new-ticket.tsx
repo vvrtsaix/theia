@@ -3,7 +3,7 @@ import { A, useNavigate } from "@solidjs/router"
 import { Entities } from "@theia/domain"
 import { Schema } from "effect"
 import { ArrowLeft } from "lucide-solid"
-import { type Component, For, Show, createSignal } from "solid-js"
+import { type Component, createSignal, For, Show } from "solid-js"
 import { effectSchema } from "#lib/effect-form"
 import { getClients, run } from "#lib/rpc"
 

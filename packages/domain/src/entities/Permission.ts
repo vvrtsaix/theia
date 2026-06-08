@@ -44,7 +44,16 @@ export type Action = typeof Action.Type
  * exact keys; renaming a resource is a breaking change requiring migration.
  */
 export const PermissionStatement = {
-  ticket: ["create", "read", "list", "update", "delete", "transition", "assign", "comment"] as const,
+  ticket: [
+    "create",
+    "read",
+    "list",
+    "update",
+    "delete",
+    "transition",
+    "assign",
+    "comment",
+  ] as const,
   comment: ["create", "delete"] as const,
   workflow: ["read", "update"] as const,
   tenant: ["read", "update", "delete"] as const,

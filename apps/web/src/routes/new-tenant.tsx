@@ -2,7 +2,7 @@ import { createForm } from "@modular-forms/solid"
 import { A, useNavigate } from "@solidjs/router"
 import { Schema } from "effect"
 import { ArrowLeft } from "lucide-solid"
-import { type Component, Show, createSignal } from "solid-js"
+import { type Component, createSignal, Show } from "solid-js"
 import { authClient } from "#auth/client"
 import { effectSchema } from "#lib/effect-form"
 

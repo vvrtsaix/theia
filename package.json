@@ -4,31 +4,32 @@
   "type": "module",
   "packageManager": "pnpm@10.17.1",
   "engines": {
-    "node": ">=22"
+    "node": ">=24"
   },
   "scripts": {
     "infra:up": "docker compose -f infra/docker-compose.yaml up -d",
     "infra:down": "docker compose -f infra/docker-compose.yaml down",
     "infra:logs": "docker compose -f infra/docker-compose.yaml logs -f",
-    "dev": "concurrently -k -n api,web -c blue,green \"pnpm dev:api\" \"pnpm dev:web\"",
-    "dev:api": "pnpm --filter @theia/api dev",
-    "dev:web": "pnpm --filter @theia/web dev",
-    "start": "pnpm --filter @theia/api start",
+    "with-env": "node scripts/with-env.mjs",
+    "dev": "NODE_ENV=development node scripts/with-env.mjs concurrently -k -n api,web -c blue,green \"pnpm --filter @theia/api dev\" \"pnpm --filter @theia/web dev\"",
+    "dev:api": "NODE_ENV=development node scripts/with-env.mjs pnpm --filter @theia/api dev",
+    "dev:web": "NODE_ENV=development node scripts/with-env.mjs pnpm --filter @theia/web dev",
+    "start": "NODE_ENV=production node scripts/with-env.mjs pnpm --filter @theia/api start",
     "build": "pnpm -r --filter './packages/*' build",
     "build:web": "pnpm --filter @theia/web build",
     "typecheck": "tsc -b",
     "lint": "biome check .",
     "lint:fix": "biome check --write .",
     "format": "biome format --write .",
-    "test": "pnpm -r --filter './packages/*' --filter './apps/*' test",
-    "db:migrate": "pnpm --filter @theia/db migrate",
-    "db:generate": "pnpm --filter @theia/db generate",
-    "db:studio": "pnpm --filter @theia/db studio"
+    "test": "NODE_ENV=test node scripts/with-env.mjs pnpm -r --filter './packages/*' --filter './apps/*' test",
+    "db:migrate": "NODE_ENV=development node scripts/with-env.mjs pnpm --filter @theia/db migrate",
+    "db:migrate:prod": "NODE_ENV=production node scripts/with-env.mjs pnpm --filter @theia/db migrate",
+    "db:generate": "NODE_ENV=development node scripts/with-env.mjs pnpm --filter @theia/db generate",
+    "db:studio": "NODE_ENV=development node scripts/with-env.mjs pnpm --filter @theia/db studio"
   },
   "devDependencies": {
     "@biomejs/biome": "catalog:",
     "concurrently": "^10.0.3",
-    "dotenv-cli": "^11.0.0",
     "typescript": "catalog:"
   }
 }

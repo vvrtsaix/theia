@@ -21,6 +21,8 @@
   "dependencies": {
     "@theia/domain": "workspace:*",
     "@theia/db": "workspace:*",
+    "@effect/platform-node": "catalog:",
+    "@effect/sql-pg": "catalog:",
     "effect": "catalog:",
     "drizzle-orm": "catalog:"
   },

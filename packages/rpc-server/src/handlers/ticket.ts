@@ -1,17 +1,17 @@
-import { CurrentSession, Database, Schema as DbSchema } from "@theia/db"
+import { CurrentSession, Database, Schema as DbSchema, EventChannel } from "@theia/db"
 import {
   ClusterMessages,
   Rpc as DomainRpc,
   Entities,
   Errors,
+  Events,
   type TenantId,
   type TicketId,
   type UserId,
 } from "@theia/domain"
-import { Events } from "@theia/domain"
-import { and, asc, desc, eq, gt, inArray, lt, or } from "drizzle-orm"
-import { Effect, Ref, Schema, Stream } from "effect"
-import { intoInfra } from "#handlers/_shared"
+import { and, asc, desc, eq, inArray, lt, or } from "drizzle-orm"
+import { Effect, Schema, Stream } from "effect"
+import { intoInfra, parseMentionHandles, resolveMentions } from "#handlers/_shared"
 
 /**
  * Ticket RPC handlers.
@@ -332,7 +332,32 @@ export const TicketHandlers = DomainRpc.TicketRpc.toLayer({
     Effect.gen(function* () {
       const session = yield* CurrentSession
       const ticket = yield* entityForCurrent(payload.id)
-      const mentions: ReadonlyArray<UserId> = [] // @mention parsing → Phase 5
+
+      // @mention parsing: parse handles from body, skip the roster fetch
+      // entirely when none are present. Member lookup uses `Database.db`
+      // (no RLS) but constrains by `organizationId = session.active...`, so
+      // a mention can't reach across tenants. See `parseMentionHandles` /
+      // `resolveMentions` in #handlers/_shared.
+      const handles = parseMentionHandles(payload.body)
+      let mentions: ReadonlyArray<UserId> = []
+      if (handles.length > 0) {
+        const db = yield* Database
+        const memberRows = yield* Effect.tryPromise({
+          try: () =>
+            db.db
+              .select({
+                id: DbSchema.users.id,
+                name: DbSchema.users.name,
+                email: DbSchema.users.email,
+              })
+              .from(DbSchema.users)
+              .innerJoin(DbSchema.members, eq(DbSchema.members.userId, DbSchema.users.id))
+              .where(eq(DbSchema.members.organizationId, session.activeOrganizationId)),
+          catch: intoInfra("ticket.comment.members"),
+        })
+        mentions = resolveMentions(handles, memberRows)
+      }
+
       return yield* ticket.Comment({ authorId: session.userId, body: payload.body, mentions }).pipe(
         Effect.catchTag("NotFound", Effect.fail),
         Effect.catch((e) => Effect.fail(intoInfra("ticket.comment")(e))),
@@ -385,11 +410,12 @@ export const TicketHandlers = DomainRpc.TicketRpc.toLayer({
 
   "ticket.events": (payload) => {
     // Cast: handler-signature inference narrows the Stream error channel to
-    // `NotFound`, but the RPC contract's union (`AuthErrors ∪ NotFound`)
-    // also covers `InfrastructureError` from the DB layer. Runtime contract
-    // holds — the casts just satisfy the call site.
+    // `NotFound`, but the RPC contract's union also covers
+    // `InfrastructureError` from the DB layer. Runtime contract holds — the
+    // casts just satisfy the call site.
     const build = Effect.gen(function* () {
       const db = yield* Database
+      const channel = yield* EventChannel
       const session = yield* CurrentSession
       const ticketId = payload.id
 
@@ -412,7 +438,7 @@ export const TicketHandlers = DomainRpc.TicketRpc.toLayer({
         return Stream.fail(new Errors.NotFound({ resource: "ticket", id: ticketId }))
       }
 
-      const decode = (row: typeof DbSchema.ticketEvents.$inferSelect) =>
+      const decodeRow = (row: typeof DbSchema.ticketEvents.$inferSelect) =>
         Schema.decodeUnknownEffect(Events.TicketEvent)(row.event).pipe(
           Effect.catchTag("SchemaError", (e) =>
             Effect.die(new Error(`ticket_event row failed decode: ${String(e)}`)),
@@ -427,37 +453,14 @@ export const TicketHandlers = DomainRpc.TicketRpc.toLayer({
           .where(eq(DbSchema.ticketEvents.ticketId, ticketId))
           .orderBy(asc(DbSchema.ticketEvents.version)),
       )
-      const past = yield* Effect.forEach(history, decode)
-      const lastVersion = yield* Ref.make(past.length > 0 ? past[past.length - 1]!.version : 0)
+      const past = yield* Effect.forEach(history, decodeRow)
 
-      // Live tail — poll the event log every 2 seconds for new rows. Pg
-      // LISTEN/NOTIFY (already triggered by `0003_listen_notify_triggers.sql`)
-      // is a follow-up optimisation; polling keeps the wire format identical.
-      const tail = Stream.tick("2 seconds").pipe(
-        Stream.mapEffect(() =>
-          Effect.gen(function* () {
-            const since = yield* Ref.get(lastVersion)
-            const rows = yield* db.tx(async (tx) =>
-              tx
-                .select()
-                .from(DbSchema.ticketEvents)
-                .where(
-                  and(
-                    eq(DbSchema.ticketEvents.ticketId, ticketId),
-                    gt(DbSchema.ticketEvents.version, since),
-                  ),
-                )
-                .orderBy(asc(DbSchema.ticketEvents.version)),
-            )
-            const decoded = yield* Effect.forEach(rows, decode)
-            if (decoded.length > 0) {
-              yield* Ref.set(lastVersion, decoded[decoded.length - 1]!.version)
-            }
-            return decoded as ReadonlyArray<Events.TicketEvent>
-          }),
-        ),
-        Stream.flatMap((chunk) => Stream.fromIterable(chunk)),
-      )
+      // Live tail via Pg LISTEN/NOTIFY: the `EventChannel` service maintains
+      // a single LISTEN connection for the process and fans out via PubSub.
+      // Filter to events for this ticket only — pg_notify channel is
+      // process-wide, payload carries the full TicketEvent so we discard
+      // mismatched ticketIds here.
+      const tail = channel.ticketEvents.pipe(Stream.filter((event) => event.ticketId === ticketId))
 
       return Stream.concat(Stream.fromIterable(past), tail)
     })

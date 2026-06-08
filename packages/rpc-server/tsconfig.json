@@ -6,10 +6,6 @@
     "tsBuildInfoFile": "dist/.tsbuildinfo",
     "noEmit": false
   },
-  "references": [
-    { "path": "../domain" },
-    { "path": "../db" },
-    { "path": "../auth" }
-  ],
+  "references": [{ "path": "../domain" }, { "path": "../db" }, { "path": "../auth" }],
   "include": ["src/**/*"]
 }

@@ -10,24 +10,33 @@ import { authClient } from "#auth/client"
  * parallel requests on every page load (Sidebar + Identity + TenantSwitcher
  * + permission hooks + page bodies each mount their own).
  *
- * Phase 6.x can swap in `@effect/atom-solid` for true reactive session
- * bindings; until then this hoisted singleton bounds the request count to
- * one per refresh.
+ * `refreshSession()` re-fetches and broadcasts to every consumer — call
+ * after login, logout, tenant switch, or any action that mutates session
+ * state on the server. Without this, components hold stale data until next
+ * full page reload.
  */
-type SessionResource = Resource<Awaited<ReturnType<typeof authClient.getSession>>>
+type SessionData = Awaited<ReturnType<typeof authClient.getSession>>
+type SessionResource = Resource<SessionData>
 
 let sharedSession: SessionResource | undefined
+let refresh: (() => Promise<SessionData | undefined>) | undefined
 
 const ensureShared = (): SessionResource => {
   if (sharedSession) return sharedSession
   createRoot(() => {
-    const [session] = createResource(() => authClient.getSession())
+    const [session, { refetch }] = createResource(() => authClient.getSession())
     sharedSession = session
+    refresh = refetch
   })
   return sharedSession as SessionResource
 }
 
 export const useSession = (): SessionResource => ensureShared()
+
+export const refreshSession = (): Promise<SessionData | undefined> => {
+  ensureShared()
+  return refresh?.() ?? Promise.resolve(undefined)
+}
 
 export const useUser = () => {
   const session = useSession()

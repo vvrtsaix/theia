@@ -1,7 +1,7 @@
-import { Effect } from "effect"
-import { and, eq, sql } from "drizzle-orm"
 import { Schema as DbSchema, type DrizzleTx } from "@theia/db"
 import { Errors, type TenantId, type TicketId, type UserId } from "@theia/domain"
+import { and, eq, sql } from "drizzle-orm"
+import { Effect } from "effect"
 
 /**
  * Auto-participation helper. Upserts a `ticket_participant` row, appending

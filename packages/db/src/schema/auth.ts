@@ -13,9 +13,7 @@ import { boolean, jsonb, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-c
  */
 
 export const users = pgTable("user", {
-  id: uuid()
-    .primaryKey()
-    .default(sql`uuidv7()`),
+  id: uuid().primaryKey().default(sql`uuidv7()`),
   email: text().notNull().unique(),
   emailVerified: boolean().notNull().default(false),
   name: text().notNull(),
@@ -30,9 +28,7 @@ export const users = pgTable("user", {
 })
 
 export const sessions = pgTable("session", {
-  id: uuid()
-    .primaryKey()
-    .default(sql`uuidv7()`),
+  id: uuid().primaryKey().default(sql`uuidv7()`),
   userId: uuid()
     .notNull()
     .references(() => users.id, { onDelete: "cascade" }),
@@ -47,9 +43,7 @@ export const sessions = pgTable("session", {
 })
 
 export const accounts = pgTable("account", {
-  id: uuid()
-    .primaryKey()
-    .default(sql`uuidv7()`),
+  id: uuid().primaryKey().default(sql`uuidv7()`),
   userId: uuid()
     .notNull()
     .references(() => users.id, { onDelete: "cascade" }),
@@ -69,9 +63,7 @@ export const accounts = pgTable("account", {
 })
 
 export const verifications = pgTable("verification", {
-  id: uuid()
-    .primaryKey()
-    .default(sql`uuidv7()`),
+  id: uuid().primaryKey().default(sql`uuidv7()`),
   identifier: text().notNull(),
   value: text().notNull(),
   expiresAt: timestamp({ withTimezone: true, mode: "date" }).notNull(),
@@ -84,9 +76,7 @@ export const verifications = pgTable("verification", {
  * better-auth owns CRUD; `additionalFields` (none yet) would land here.
  */
 export const organizations = pgTable("organization", {
-  id: uuid()
-    .primaryKey()
-    .default(sql`uuidv7()`),
+  id: uuid().primaryKey().default(sql`uuidv7()`),
   name: text().notNull(),
   slug: text().notNull().unique(),
   logo: text(),
@@ -97,9 +87,7 @@ export const organizations = pgTable("organization", {
 
 /** (user, organization) row. `role` is a per-tenant role string (custom roles allowed). */
 export const members = pgTable("member", {
-  id: uuid()
-    .primaryKey()
-    .default(sql`uuidv7()`),
+  id: uuid().primaryKey().default(sql`uuidv7()`),
   userId: uuid()
     .notNull()
     .references(() => users.id, { onDelete: "cascade" }),
@@ -111,9 +99,7 @@ export const members = pgTable("member", {
 })
 
 export const invitations = pgTable("invitation", {
-  id: uuid()
-    .primaryKey()
-    .default(sql`uuidv7()`),
+  id: uuid().primaryKey().default(sql`uuidv7()`),
   organizationId: uuid()
     .notNull()
     .references(() => organizations.id, { onDelete: "cascade" }),
@@ -138,9 +124,7 @@ export const invitations = pgTable("invitation", {
  * permission statement. Each org defines its own roles.
  */
 export const organizationRoles = pgTable("organization_role", {
-  id: uuid()
-    .primaryKey()
-    .default(sql`uuidv7()`),
+  id: uuid().primaryKey().default(sql`uuidv7()`),
   organizationId: uuid()
     .notNull()
     .references(() => organizations.id, { onDelete: "cascade" }),

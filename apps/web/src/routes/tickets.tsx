@@ -1,7 +1,7 @@
 import { A } from "@solidjs/router"
 import type { Entities } from "@theia/domain"
 import { DateTime } from "effect"
-import { type Component, For, Show, createMemo, createResource } from "solid-js"
+import { type Component, createMemo, createResource, For, Show } from "solid-js"
 import { usePermission } from "#lib/permissions"
 import { getClients, run } from "#lib/rpc"
 

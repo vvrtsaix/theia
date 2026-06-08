@@ -1,7 +1,7 @@
 import { resolveSession } from "@theia/auth"
 import { CurrentSession } from "@theia/db"
 import { Rpc as DomainRpc } from "@theia/domain"
-import { Effect, Layer } from "effect"
+import { type Cause, Effect, Layer } from "effect"
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
 import { type Rpc, type RpcGroup, RpcSerialization, RpcServer } from "effect/unstable/rpc"
 import { AllHandlers } from "#handlers"
@@ -39,29 +39,57 @@ const sessionFromRequest = Effect.gen(function* () {
 
 /**
  * Build a single RPC group's per-request handler effect, with session
- * injection + auth-error → HTTP response mapping baked in.
+ * injection + auth-error → HTTP response mapping + OTel span +
+ * unmapped-defect → 500 boundary baked in.
+ *
+ * Span shape: `rpc.<groupName>` so traces group by domain area. Request
+ * method + path attach as attributes for filtering. Unmapped defects
+ * (anything that wasn't surfaced via the RPC error union) are logged with
+ * cause + mapped to 500 — never leak a raw stack to the client.
  */
-const buildGroup = <Rpcs extends Rpc.Any>(group: RpcGroup.RpcGroup<Rpcs>) =>
+const buildGroup = <Rpcs extends Rpc.Any>(name: string, group: RpcGroup.RpcGroup<Rpcs>) =>
   Effect.gen(function* () {
     const httpApp = yield* RpcServer.toHttpEffect(group)
-    return httpApp.pipe(
+    const handler = httpApp.pipe(
       Effect.provideServiceEffect(CurrentSession, sessionFromRequest),
       Effect.catchTags({
         SessionInvalid: (e) => Effect.succeed(HttpServerResponse.text(e.reason, { status: 401 })),
         NoActiveOrganization: () =>
           Effect.succeed(HttpServerResponse.text("no active organization", { status: 412 })),
       }),
+      Effect.catchCause((cause: Cause.Cause<unknown>) =>
+        // Pass the cause object directly — the Effect logger formats lazily
+        // and structured loggers (OTel, JSON) can keep the cause tree
+        // intact. `Cause.pretty` was being called eagerly on every error;
+        // dropping it lets the logger decide cost.
+        Effect.logError(`rpc.${name} failed`, cause).pipe(
+          Effect.as(HttpServerResponse.text("internal error", { status: 500 })),
+        ),
+      ),
+    )
+    return HttpServerRequest.HttpServerRequest.pipe(
+      Effect.flatMap((req) =>
+        handler.pipe(
+          Effect.withSpan(`rpc.${name}`, {
+            attributes: {
+              "http.method": req.method,
+              "http.route": req.url,
+              "rpc.group": name,
+            },
+          }),
+        ),
+      ),
     )
   })
 
 const routes = Effect.gen(function* () {
-  const ticket = yield* buildGroup(DomainRpc.TicketRpc)
-  const workflow = yield* buildGroup(DomainRpc.WorkflowRpc)
-  const notification = yield* buildGroup(DomainRpc.NotificationRpc)
-  const system = yield* buildGroup(DomainRpc.SystemConfigRpc)
-  const audit = yield* buildGroup(DomainRpc.AuditRpc)
-  const search = yield* buildGroup(DomainRpc.SearchRpc)
-  const bulk = yield* buildGroup(DomainRpc.BulkRpc)
+  const ticket = yield* buildGroup("ticket", DomainRpc.TicketRpc)
+  const workflow = yield* buildGroup("workflow", DomainRpc.WorkflowRpc)
+  const notification = yield* buildGroup("notification", DomainRpc.NotificationRpc)
+  const system = yield* buildGroup("system", DomainRpc.SystemConfigRpc)
+  const audit = yield* buildGroup("audit", DomainRpc.AuditRpc)
+  const search = yield* buildGroup("search", DomainRpc.SearchRpc)
+  const bulk = yield* buildGroup("bulk", DomainRpc.BulkRpc)
   return [
     HttpRouter.route("POST", "/rpc/ticket", ticket),
     HttpRouter.route("POST", "/rpc/workflow", workflow),

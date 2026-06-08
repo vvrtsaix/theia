@@ -1,13 +1,7 @@
 import { Schema } from "effect"
 import { Rpc, RpcGroup } from "effect/unstable/rpc"
 import { TicketParticipant } from "#entities/Participant"
-import {
-  Ticket,
-  TicketPriority,
-  TicketSummary,
-  TicketTag,
-  TicketType,
-} from "#entities/Ticket"
+import { Ticket, TicketPriority, TicketSummary, TicketTag, TicketType } from "#entities/Ticket"
 import {
   AlreadySubscribed,
   Forbidden,

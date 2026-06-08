@@ -3,12 +3,12 @@ import { Schema } from "effect"
 import { Trash2, X } from "lucide-solid"
 import {
   type Component,
-  For,
-  type JSX,
-  Show,
   createMemo,
   createResource,
   createSignal,
+  For,
+  type JSX,
+  Show,
 } from "solid-js"
 import { authClient } from "#auth/client"
 import { useSession } from "#auth/session"

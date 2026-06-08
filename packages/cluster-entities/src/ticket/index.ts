@@ -1,28 +1,20 @@
-import { DateTime, Effect, Schema, Stream } from "effect"
-import { and, eq } from "drizzle-orm"
-import { Entity } from "effect/unstable/cluster"
-import {
-  Database,
-  Schema as DbSchema,
-  type DrizzleTx,
-} from "@theia/db"
+import { Database, Schema as DbSchema, type DrizzleTx } from "@theia/db"
 import {
   ClusterMessages,
-  Entities,
+  type Entities,
   Errors,
+  Events,
   type TenantId,
   type TicketEventId,
   type TicketId,
   type UserId,
 } from "@theia/domain"
-import { Events } from "@theia/domain"
+import { and, eq } from "drizzle-orm"
+import { DateTime, Effect, Schema, Stream } from "effect"
+import { Entity } from "effect/unstable/cluster"
 import { appendEvent } from "#ticket/events"
 import { setSubscription, upsertParticipant } from "#ticket/participation"
-import {
-  decodeParticipant,
-  decodeTicket,
-  loadWorkflow,
-} from "#ticket/state"
+import { decodeParticipant, decodeTicket, loadWorkflow } from "#ticket/state"
 
 /**
  * `TicketEntity` Behavior — one actor per ticket.
@@ -69,10 +61,7 @@ interface LoadedState {
   readonly tags: ReadonlyArray<string>
 }
 
-const loadOrFail = (
-  tx: DrizzleTx,
-  ticketId: TicketId,
-): Promise<LoadedState | null> =>
+const loadOrFail = (tx: DrizzleTx, ticketId: TicketId): Promise<LoadedState | null> =>
   (async () => {
     const tickets = await tx
       .select()
@@ -100,16 +89,13 @@ const ensureVersion = (
 
 const newEventId = () => crypto.randomUUID() as TicketEventId
 
-const envelope = (
-  tenantId: TenantId,
-  ticketId: TicketId,
-  version: number,
-  occurredAt: Date,
-) => ({
+const envelope = (tenantId: TenantId, ticketId: TicketId, version: number, occurredAt: Date) => ({
   eventId: newEventId(),
   ticketId,
   tenantId,
-  occurredAt: occurredAt.toISOString() as unknown as Events.TicketEvent extends { occurredAt: infer T }
+  occurredAt: occurredAt.toISOString() as unknown as Events.TicketEvent extends {
+    occurredAt: infer T
+  }
     ? T
     : never,
   version,
@@ -185,27 +171,26 @@ export const TicketEntityLive = ClusterMessages.TicketEntity.toLayer(
           }
 
           // Workflow validation (fresh).
-          const workflow = yield* db.txAs(tenantId, (tx) => Promise.resolve(tx)).pipe(
-            Effect.flatMap((tx) => loadWorkflow(tx, payload.tenantId)),
-            Effect.catchTag("NotFound", () =>
-              Effect.fail(
-                new Errors.ValidationError({
-                  field: "tenantId",
-                  message: "tenant workflow not seeded",
-                }),
+          const workflow = yield* db
+            .txAs(tenantId, (tx) => Promise.resolve(tx))
+            .pipe(
+              Effect.flatMap((tx) => loadWorkflow(tx, payload.tenantId)),
+              Effect.catchTag("NotFound", () =>
+                Effect.fail(
+                  new Errors.ValidationError({
+                    field: "tenantId",
+                    message: "tenant workflow not seeded",
+                  }),
+                ),
               ),
-            ),
-          )
+            )
           if (!workflow.priorities.some((p) => p.key === payload.priority)) {
             return yield* new Errors.ValidationError({
               field: "priority",
               message: `unknown priority ${payload.priority}`,
             })
           }
-          if (
-            payload.typeKey !== null &&
-            !workflow.types.some((t) => t.key === payload.typeKey)
-          ) {
+          if (payload.typeKey !== null && !workflow.types.some((t) => t.key === payload.typeKey)) {
             return yield* new Errors.InvalidType({
               tenantId: payload.tenantId,
               type: payload.typeKey,
@@ -636,7 +621,7 @@ export const TicketEntityLive = ClusterMessages.TicketEntity.toLayer(
               )
               .limit(1),
           )
-          if (existing.length > 0 && existing[0]!.subscribed === "true") {
+          if (existing.length > 0 && existing[0]?.subscribed === "true") {
             return yield* new Errors.AlreadySubscribed({ ticketId, userId: payload.userId })
           }
 
@@ -691,7 +676,7 @@ export const TicketEntityLive = ClusterMessages.TicketEntity.toLayer(
               )
               .limit(1),
           )
-          if (existing.length === 0 || existing[0]!.subscribed === "false") {
+          if (existing.length === 0 || existing[0]?.subscribed === "false") {
             return yield* new Errors.NotSubscribed({ ticketId, userId: payload.userId })
           }
 
@@ -745,7 +730,8 @@ export const TicketEntityLive = ClusterMessages.TicketEntity.toLayer(
       // ─── event stream ─────────────────────────────────────────────────────
       //
       // Pull-style stream: replay all persisted events for this ticket. Live
-      // tailing via Pg LISTEN/NOTIFY or cluster pub/sub is Phase 8.
+      // tailing for the RPC boundary lives in `rpc-server/handlers/ticket.ts`
+      // via the `@theia/db` `EventChannel` (Pg LISTEN/NOTIFY → PubSub).
       //
       // `Stream.unwrap` flattens an `Effect<Stream>` into a `Stream` so the
       // existence check + DB load happen inside the stream's error channel.
@@ -761,9 +747,7 @@ export const TicketEntityLive = ClusterMessages.TicketEntity.toLayer(
                 .limit(1),
             )
             if (exists.length === 0) {
-              return Stream.fail(
-                new Errors.NotFound({ resource: "ticket", id: ticketId }),
-              )
+              return Stream.fail(new Errors.NotFound({ resource: "ticket", id: ticketId }))
             }
             const rows = yield* db.txAs(tenantId, (tx) =>
               tx
@@ -773,9 +757,7 @@ export const TicketEntityLive = ClusterMessages.TicketEntity.toLayer(
                 .orderBy(DbSchema.ticketEvents.version),
             )
             return Stream.fromIterable(rows.map((r) => r.event)).pipe(
-              Stream.mapEffect((event) =>
-                Schema.decodeUnknownEffect(Events.TicketEvent)(event),
-              ),
+              Stream.mapEffect((event) => Schema.decodeUnknownEffect(Events.TicketEvent)(event)),
               Stream.catchTag("SchemaError", (e) =>
                 Stream.die(new Error(`ticket_event row failed decode: ${String(e)}`)),
               ),
@@ -787,6 +769,6 @@ export const TicketEntityLive = ClusterMessages.TicketEntity.toLayer(
   { maxIdleTime: "10 minutes" },
 )
 
-export * from "#ticket/state"
-export * from "#ticket/participation"
 export * from "#ticket/events"
+export * from "#ticket/participation"
+export * from "#ticket/state"

@@ -1,12 +1,7 @@
 import { Schema } from "effect"
 import { Rpc, RpcGroup } from "effect/unstable/rpc"
 import { Ticket, TicketPriority } from "#entities/Ticket"
-import {
-  Forbidden,
-  InfrastructureError,
-  NoActiveTenant,
-  Unauthorized,
-} from "#errors"
+import { Forbidden, InfrastructureError, NoActiveTenant, Unauthorized } from "#errors"
 import { TicketId, UserId } from "#ids"
 
 const AuthErrors = [Unauthorized, NoActiveTenant, Forbidden, InfrastructureError] as const

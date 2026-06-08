@@ -51,7 +51,7 @@ export const devSeed = Effect.gen(function* () {
         Effect.flatMap((rows) =>
           rows.length === 0
             ? Effect.fail(new Error("dev-seed: signUp failed and no existing user found"))
-            : Effect.succeed(rows[0]!.id),
+            : Effect.succeed(rows[0]?.id),
         ),
       ),
     ),
@@ -69,7 +69,7 @@ export const devSeed = Effect.gen(function* () {
   }).pipe(
     Effect.flatMap((rows) =>
       rows.length > 0
-        ? Effect.succeed(rows[0]!.id)
+        ? Effect.succeed(rows[0]?.id)
         : Effect.tryPromise({
             try: () =>
               db.db
@@ -77,7 +77,7 @@ export const devSeed = Effect.gen(function* () {
                 .values({ name: DEV_TENANT_NAME, slug: DEV_TENANT_SLUG })
                 .returning({ id: DbSchema.organizations.id }),
             catch: (e) => new Error(`dev-seed org insert: ${String(e)}`),
-          }).pipe(Effect.map((r) => r[0]!.id)),
+          }).pipe(Effect.map((r) => r[0]?.id)),
     ),
   )
 

@@ -1,15 +1,10 @@
 import { Schema } from "effect"
+import { TicketPriority, TicketStatus, TicketTag, TicketType } from "#entities/Workflow"
 import { TenantId, TicketId, UserId } from "#ids"
-import {
-  TicketPriority,
-  TicketStatus,
-  TicketTag,
-  TicketType,
-} from "#entities/Workflow"
 
 // Re-export so existing imports of `TicketStatus`/`TicketPriority`/`TicketType`/
 // `TicketTag` from `#entities/Ticket` keep working (canonical home: Workflow.ts).
-export { TicketStatus, TicketPriority, TicketType, TicketTag }
+export { TicketPriority, TicketStatus, TicketTag, TicketType }
 
 export class Ticket extends Schema.Class<Ticket>("Ticket")({
   id: TicketId,

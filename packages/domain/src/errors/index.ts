@@ -26,13 +26,10 @@ export class NotFound extends Schema.TaggedErrorClass<NotFound>()("NotFound", {
 }) {}
 
 /** Payload failed Schema decode at an RPC or HTTP boundary. */
-export class ValidationError extends Schema.TaggedErrorClass<ValidationError>()(
-  "ValidationError",
-  {
-    field: Schema.String,
-    message: Schema.String,
-  },
-) {}
+export class ValidationError extends Schema.TaggedErrorClass<ValidationError>()("ValidationError", {
+  field: Schema.String,
+  message: Schema.String,
+}) {}
 
 /** Ticket cannot transition from `from` to `to`. Enforced by the TicketEntity actor. */
 export class InvalidTransition extends Schema.TaggedErrorClass<InvalidTransition>()(

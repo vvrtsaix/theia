@@ -1,3 +1,4 @@
+import { Entities } from "@theia/domain"
 import { createAccessControl } from "better-auth/plugins/access"
 import {
   adminAc as orgAdminAc,
@@ -5,7 +6,6 @@ import {
   memberAc as orgMemberAc,
   ownerAc as orgOwnerAc,
 } from "better-auth/plugins/organization/access"
-import { Entities } from "@theia/domain"
 
 /**
  * Domain → better-auth statement bridge.

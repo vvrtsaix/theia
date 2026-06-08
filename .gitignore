@@ -8,8 +8,9 @@ build/
 .tsbuildinfo
 *.tsbuildinfo
 
-# env
-.env
+# env — Vite-style cascade
+# `.env` and `.env.{mode}` are committable defaults (no secrets).
+# `*.local` variants are always gitignored (local overrides + secrets).
 .env.local
 .env.*.local
 

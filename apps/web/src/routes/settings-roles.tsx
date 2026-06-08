@@ -1,6 +1,6 @@
 import { Entities } from "@theia/domain"
 import { Trash2 } from "lucide-solid"
-import { type Component, For, Show, createMemo, createResource, createSignal } from "solid-js"
+import { type Component, createMemo, createResource, createSignal, For, Show } from "solid-js"
 import { authClient } from "#auth/client"
 import { useSession } from "#auth/session"
 import { usePermission } from "#lib/permissions"

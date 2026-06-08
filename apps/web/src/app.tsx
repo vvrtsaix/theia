@@ -1,6 +1,6 @@
 import { A, Route, useLocation, useNavigate } from "@solidjs/router"
 import { Bell, Inbox, LogOut, Settings, Ticket } from "lucide-solid"
-import { type Component, type JSX, Match, Show, Switch, createMemo, lazy } from "solid-js"
+import { type Component, createMemo, type JSX, lazy, Match, Show, Switch } from "solid-js"
 import { authClient } from "#auth/client"
 import { useSession } from "#auth/session"
 import { TenantSwitcher } from "#components/TenantSwitcher"

@@ -1,0 +1,50 @@
+# Reference compose for prod-style deployment.
+#
+#   - `migrate` runs first as a one-shot init container. Exits 0 on success.
+#   - `api` waits for `migrate` to complete, then serves traffic.
+#
+# DATABASE_URL must point at the real Postgres (managed service or k8s
+# StatefulSet). The local `db` service from `docker-compose.yaml` is not
+# referenced here — prod data lives elsewhere.
+#
+# Adapt for your orchestrator:
+#   - k8s: `migrate` becomes a Job; `api` becomes a Deployment with the
+#     Job's completion as an init dependency (or via Argo Workflow).
+#   - ECS: `migrate` runs as a task, `api` as a service with task
+#     dependency.
+
+services:
+  migrate:
+    image: theia-api:${TAG:-latest}
+    build:
+      context: ..
+      dockerfile: apps/api/Dockerfile
+    command: ["pnpm", "--filter", "@theia/db", "migrate"]
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+    restart: "no"
+
+  api:
+    image: theia-api:${TAG:-latest}
+    build:
+      context: ..
+      dockerfile: apps/api/Dockerfile
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: ${DATABASE_URL}
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET}
+      BETTER_AUTH_URL: ${BETTER_AUTH_URL}
+      WEB_BASE_URL: ${WEB_BASE_URL}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+    ports:
+      - "3000:3000"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3000/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
