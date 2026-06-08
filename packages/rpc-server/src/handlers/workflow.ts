@@ -1,7 +1,7 @@
-import { DateTime, Effect, Schema } from "effect"
-import { eq } from "drizzle-orm"
 import { CurrentSession, Database, Schema as DbSchema, type DrizzleTx } from "@theia/db"
-import { Entities, Errors, Rpc as DomainRpc } from "@theia/domain"
+import { Rpc as DomainRpc, Entities, Errors } from "@theia/domain"
+import { eq } from "drizzle-orm"
+import { DateTime, Effect, Schema } from "effect"
 
 /**
  * Workflow handlers — Drizzle query builder, all queries inside
@@ -93,9 +93,9 @@ const replaceWhere = <A, K extends keyof A>(xs: ReadonlyArray<A>, key: K, item: 
 
 /** Apply a delta to the current workflow then persist. */
 const mutate = (
-  apply: (current: Entities.Workflow) =>
-    | NextWorkflow
-    | Effect.Effect<never, Errors.ValidationError | Errors.NotFound>,
+  apply: (
+    current: Entities.Workflow,
+  ) => NextWorkflow | Effect.Effect<never, Errors.ValidationError | Errors.NotFound>,
 ) =>
   Effect.gen(function* () {
     const db = yield* Database
@@ -205,9 +205,7 @@ export const WorkflowHandlers = DomainRpc.WorkflowRpc.toLayer({
       return {
         ...w,
         statuses: w.statuses.filter((s) => s.key !== payload.key),
-        transitions: w.transitions.filter(
-          (t) => t.from !== payload.key && t.to !== payload.key,
-        ),
+        transitions: w.transitions.filter((t) => t.from !== payload.key && t.to !== payload.key),
       }
     }),
 
@@ -268,9 +266,7 @@ export const WorkflowHandlers = DomainRpc.WorkflowRpc.toLayer({
     mutate((w) => {
       const next = replaceWhere(w.types, "key", payload.type)
       if (!next) {
-        return Effect.fail(
-          new Errors.NotFound({ resource: "workflow.type", id: payload.type.key }),
-        )
+        return Effect.fail(new Errors.NotFound({ resource: "workflow.type", id: payload.type.key }))
       }
       return { ...w, types: next }
     }),
@@ -305,9 +301,7 @@ export const WorkflowHandlers = DomainRpc.WorkflowRpc.toLayer({
     mutate((w) => {
       const next = replaceWhere(w.tags, "key", payload.tag)
       if (!next) {
-        return Effect.fail(
-          new Errors.NotFound({ resource: "workflow.tag", id: payload.tag.key }),
-        )
+        return Effect.fail(new Errors.NotFound({ resource: "workflow.tag", id: payload.tag.key }))
       }
       return { ...w, tags: next }
     }),
@@ -323,4 +317,3 @@ export const WorkflowHandlers = DomainRpc.WorkflowRpc.toLayer({
       defaultTypeKey: payload.defaultTypeKey,
     })),
 })
-

@@ -1,28 +1,31 @@
-import { Effect, Layer } from "effect"
-import { BunRuntime } from "@effect/platform-bun"
-import { DatabaseLive } from "@theia/db"
+import { BunHttpServer, BunRuntime } from "@effect/platform-bun"
 import { ClusterTestLive } from "@theia/cluster-entities"
+import { DatabaseLive } from "@theia/db"
 import { OtelLive } from "@theia/otel"
+import { RpcServerLive } from "@theia/rpc-server/http"
+import { Effect, Layer } from "effect"
+import { HttpRouter } from "effect/unstable/http"
+import { AuthHandlerLive } from "./auth-handler"
+import { devSeed } from "./dev-seed"
 
 /**
  * Theia API entrypoint.
  *
- * **Current state — Phase 7 boundary:**
- * This file wires the *non-HTTP* layers (Database, Cluster, OTel) and starts
- * a long-running process. The HTTP server + RPC mount + better-auth handler
- * wiring lands in Phase 7.x once the exact `effect/unstable/http` API surface
- * we depend on is pinned (the v4 HTTP API is still moving between betas).
- *
- * For now this main:
- *   1. Builds OTel SDK.
- *   2. Builds the DB pool.
- *   3. Builds the Cluster TestRunner + TicketEntity layer.
- *   4. Holds the process open via `Effect.never`.
- *
- * The Solid SPA can still talk to a separate running server (e.g. via
- * `vite dev` proxy to a future `Bun.serve` handler) — the data layer is
- * fully exercised by the RPC handlers in `@theia/rpc-server`.
+ * Layers, outer → inner:
+ *   1. OTel SDK (top-level so every span propagates)
+ *   2. Postgres pool (`DatabaseLive`) — `provideMerge` so the bootstrap
+ *      `devSeed` can use the same connection.
+ *   3. Cluster TestRunner + TicketEntity behaviour
+ *   4. Bun HTTP server on :3000
+ *   5. RPC server group mounts (per-request `CurrentSession` resolved from
+ *      cookies inside `@theia/rpc-server/http`).
+ *   6. better-auth Fetch handler at `/api/auth/*` (login / signup / logout /
+ *      organization CRUD / member invites / role admin).
  */
+
+const HttpLive = HttpRouter.serve(Layer.mergeAll(RpcServerLive, AuthHandlerLive)).pipe(
+  Layer.provide(BunHttpServer.layer({ port: 3000 })),
+)
 
 /**
  * Cast: the v4 cluster `Entity.toLayer` HandlerServices type does not yet
@@ -32,13 +35,27 @@ import { OtelLive } from "@theia/otel"
  * api process while staying honest about runtime behaviour (the address IS
  * supplied at message time, the type system just doesn't know).
  */
-const AppLive: Layer.Layer<never, unknown, never> = ClusterTestLive.pipe(
-  Layer.provide(DatabaseLive),
+const AppLive: Layer.Layer<never, unknown, never> = HttpLive.pipe(
+  Layer.provide(ClusterTestLive),
+  Layer.provideMerge(DatabaseLive),
   Layer.provide(OtelLive),
 ) as unknown as Layer.Layer<never, unknown, never>
 
+/**
+ * `dev-seed` plants a known credential (`dev@andsystems.tech` / `devdevdev`)
+ * for local convenience. Anything other than explicit dev mode must skip it —
+ * shipping the seed to staging/prod is an instant root credential on the
+ * deployed tenant.
+ */
+const shouldRunDevSeed = process.env.THEIA_DEV_SEED === "1"
+
 const program = Effect.gen(function* () {
-  yield* Effect.logInfo("theia api: layers built; waiting for HTTP wiring (Phase 7.x)")
+  if (shouldRunDevSeed) {
+    yield* devSeed
+  } else {
+    yield* Effect.logInfo("dev-seed: skipped (set THEIA_DEV_SEED=1 to enable)")
+  }
+  yield* Effect.logInfo("theia api: listening on http://localhost:3000")
   yield* Effect.never
 }).pipe(Effect.provide(AppLive)) as Effect.Effect<never, unknown, never>
 

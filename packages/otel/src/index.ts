@@ -1,7 +1,10 @@
-import { Config, Effect } from "effect"
-import { NodeSdk } from "@effect/opentelemetry"
+// Subpath import — the package barrel re-exports `WebSdk`, which transitively
+// requires `@opentelemetry/sdk-trace-web`. Importing the Node SDK directly
+// avoids pulling that dependency into a Node-only build.
+import * as NodeSdk from "@effect/opentelemetry/NodeSdk"
 import { OTLPTraceExporter } from "@opentelemetry/exporter-trace-otlp-http"
 import { BatchSpanProcessor } from "@opentelemetry/sdk-trace-base"
+import { Config, Effect } from "effect"
 
 /**
  * OpenTelemetry SDK layer.

@@ -1,10 +1,21 @@
 import { Layer } from "effect"
+import { AuditHandlers } from "#handlers/audit"
+import { BulkHandlers } from "#handlers/bulk"
 import { NotificationHandlers } from "#handlers/notification"
+import { SearchHandlers } from "#handlers/search"
 import { SystemConfigHandlers } from "#handlers/system"
 import { TicketHandlers } from "#handlers/ticket"
 import { WorkflowHandlers } from "#handlers/workflow"
 
-export { NotificationHandlers, SystemConfigHandlers, TicketHandlers, WorkflowHandlers }
+export {
+  AuditHandlers,
+  BulkHandlers,
+  NotificationHandlers,
+  SearchHandlers,
+  SystemConfigHandlers,
+  TicketHandlers,
+  WorkflowHandlers,
+}
 
 /**
  * Bundle of every handler layer. Caller still has to provide:
@@ -17,4 +28,7 @@ export const AllHandlers = Layer.mergeAll(
   NotificationHandlers,
   SystemConfigHandlers,
   TicketHandlers,
+  AuditHandlers,
+  SearchHandlers,
+  BulkHandlers,
 )

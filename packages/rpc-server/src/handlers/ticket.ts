@@ -1,14 +1,16 @@
-import { Effect, Schema } from "effect"
-import { and, desc, eq, inArray, lt, or } from "drizzle-orm"
 import { CurrentSession, Database, Schema as DbSchema } from "@theia/db"
 import {
   ClusterMessages,
+  Rpc as DomainRpc,
   Entities,
   Errors,
-  Rpc as DomainRpc,
+  type TenantId,
   type TicketId,
   type UserId,
 } from "@theia/domain"
+import { Events } from "@theia/domain"
+import { and, asc, desc, eq, gt, inArray, lt, or } from "drizzle-orm"
+import { Effect, Ref, Schema, Stream } from "effect"
 import { intoInfra } from "#handlers/_shared"
 
 /**
@@ -83,12 +85,25 @@ const decodeParticipant = (row: ParticipantRow) =>
     ),
   )
 
-/** Send a message to the TicketEntity actor for `id`. Cluster layer = Phase 5. */
-const entityFor = (id: TicketId) =>
+/**
+ * Resolve the TicketEntity client for `(tenantId, ticketId)`.
+ *
+ * The cluster entity address is `<tenantId>:<ticketId>` — the actor parses
+ * both halves out of `CurrentAddress` to bind RLS and target the row. The
+ * RPC payloads only carry `ticketId`; tenant comes from `CurrentSession`.
+ */
+const entityFor = (tenantId: string, ticketId: TicketId) =>
   ClusterMessages.TicketEntity.client.pipe(
-    Effect.map((clientFor) => clientFor(id)),
+    Effect.map((clientFor) => clientFor(`${tenantId}:${ticketId}`)),
     Effect.mapError(intoInfra("ticket.entity-client")),
   )
+
+/** Convenience: pull the active tenant from session + build the entity client. */
+const entityForCurrent = (ticketId: TicketId) =>
+  Effect.gen(function* () {
+    const session = yield* CurrentSession
+    return yield* entityFor(session.activeOrganizationId as unknown as string, ticketId)
+  })
 
 export const TicketHandlers = DomainRpc.TicketRpc.toLayer({
   "ticket.list": (payload) =>
@@ -173,15 +188,46 @@ export const TicketHandlers = DomainRpc.TicketRpc.toLayer({
 
   // ─── Mutations — delegate to TicketEntity actor (Phase 5 wires runtime) ──
 
-  "ticket.open": (_payload) =>
-    Effect.die(
-      new Error("ticket.open routes through a fresh TicketEntity id; awaits Phase 5"),
-    ),
+  "ticket.open": (payload) =>
+    Effect.gen(function* () {
+      const session = yield* CurrentSession
+      // `TicketEntity` address shape is `<tenantId>:<ticketId>` — the actor
+      // parses both halves in `parseAddress`. Generate the ticket id here so
+      // the success response can return it without a second round-trip.
+      const ticketId = crypto.randomUUID() as TicketId
+      // better-auth models tenants as Organizations; the domain model uses
+      // TenantId. Identifiers are isomorphic at runtime — cast at this
+      // boundary instead of leaking the duplicate brand through handlers.
+      const tenantId = session.activeOrganizationId as unknown as TenantId
+      const address = `${tenantId}:${ticketId}`
+      const clientFor = yield* ClusterMessages.TicketEntity.client.pipe(
+        Effect.mapError(intoInfra("ticket.entity-client")),
+      )
+      const entity = clientFor(address)
+      return yield* entity
+        .Open({
+          tenantId,
+          reporterId: session.userId,
+          title: payload.title,
+          description: payload.description,
+          priority: payload.priority,
+          typeKey: payload.typeKey,
+          tags: payload.tags ?? [],
+        })
+        .pipe(
+          Effect.catchTags({
+            ValidationError: Effect.fail,
+            InvalidType: Effect.fail,
+            InvalidTag: Effect.fail,
+          }),
+          Effect.catch((e) => Effect.fail(intoInfra("ticket.open")(e))),
+        )
+    }),
 
   "ticket.assign": (payload) =>
     Effect.gen(function* () {
       const session = yield* CurrentSession
-      const ticket = yield* entityFor(payload.id)
+      const ticket = yield* entityForCurrent(payload.id)
       return yield* ticket
         .Assign({
           assigneeId: payload.assigneeId,
@@ -197,7 +243,7 @@ export const TicketHandlers = DomainRpc.TicketRpc.toLayer({
   "ticket.unassign": (payload) =>
     Effect.gen(function* () {
       const session = yield* CurrentSession
-      const ticket = yield* entityFor(payload.id)
+      const ticket = yield* entityForCurrent(payload.id)
       return yield* ticket
         .Unassign({ actorId: session.userId, expectedVersion: payload.expectedVersion })
         .pipe(
@@ -209,7 +255,7 @@ export const TicketHandlers = DomainRpc.TicketRpc.toLayer({
   "ticket.transition": (payload) =>
     Effect.gen(function* () {
       const session = yield* CurrentSession
-      const ticket = yield* entityFor(payload.id)
+      const ticket = yield* entityForCurrent(payload.id)
       return yield* ticket
         .Transition({
           to: payload.to,
@@ -229,7 +275,7 @@ export const TicketHandlers = DomainRpc.TicketRpc.toLayer({
   "ticket.changePriority": (payload) =>
     Effect.gen(function* () {
       const session = yield* CurrentSession
-      const ticket = yield* entityFor(payload.id)
+      const ticket = yield* entityForCurrent(payload.id)
       return yield* ticket
         .ChangePriority({
           to: payload.to,
@@ -245,7 +291,7 @@ export const TicketHandlers = DomainRpc.TicketRpc.toLayer({
   "ticket.setType": (payload) =>
     Effect.gen(function* () {
       const session = yield* CurrentSession
-      const ticket = yield* entityFor(payload.id)
+      const ticket = yield* entityForCurrent(payload.id)
       return yield* ticket
         .ChangeType({
           to: payload.to,
@@ -265,38 +311,32 @@ export const TicketHandlers = DomainRpc.TicketRpc.toLayer({
   "ticket.addTag": (payload) =>
     Effect.gen(function* () {
       const session = yield* CurrentSession
-      const ticket = yield* entityFor(payload.id)
-      return yield* ticket
-        .AddTag({ tag: payload.tag, actorId: session.userId })
-        .pipe(
-          Effect.catchTags({ NotFound: Effect.fail, InvalidTag: Effect.fail }),
-          Effect.catch((e) => Effect.fail(intoInfra("ticket.addTag")(e))),
-        )
+      const ticket = yield* entityForCurrent(payload.id)
+      return yield* ticket.AddTag({ tag: payload.tag, actorId: session.userId }).pipe(
+        Effect.catchTags({ NotFound: Effect.fail, InvalidTag: Effect.fail }),
+        Effect.catch((e) => Effect.fail(intoInfra("ticket.addTag")(e))),
+      )
     }),
 
   "ticket.removeTag": (payload) =>
     Effect.gen(function* () {
       const session = yield* CurrentSession
-      const ticket = yield* entityFor(payload.id)
-      return yield* ticket
-        .RemoveTag({ tag: payload.tag, actorId: session.userId })
-        .pipe(
-          Effect.catchTag("NotFound", Effect.fail),
-          Effect.catch((e) => Effect.fail(intoInfra("ticket.removeTag")(e))),
-        )
+      const ticket = yield* entityForCurrent(payload.id)
+      return yield* ticket.RemoveTag({ tag: payload.tag, actorId: session.userId }).pipe(
+        Effect.catchTag("NotFound", Effect.fail),
+        Effect.catch((e) => Effect.fail(intoInfra("ticket.removeTag")(e))),
+      )
     }),
 
   "ticket.comment": (payload) =>
     Effect.gen(function* () {
       const session = yield* CurrentSession
-      const ticket = yield* entityFor(payload.id)
+      const ticket = yield* entityForCurrent(payload.id)
       const mentions: ReadonlyArray<UserId> = [] // @mention parsing → Phase 5
-      return yield* ticket
-        .Comment({ authorId: session.userId, body: payload.body, mentions })
-        .pipe(
-          Effect.catchTag("NotFound", Effect.fail),
-          Effect.catch((e) => Effect.fail(intoInfra("ticket.comment")(e))),
-        )
+      return yield* ticket.Comment({ authorId: session.userId, body: payload.body, mentions }).pipe(
+        Effect.catchTag("NotFound", Effect.fail),
+        Effect.catch((e) => Effect.fail(intoInfra("ticket.comment")(e))),
+      )
     }),
 
   // ─── Participants + subscriptions ─────────────────────────────────────────
@@ -326,31 +366,101 @@ export const TicketHandlers = DomainRpc.TicketRpc.toLayer({
   "ticket.subscribe": (payload) =>
     Effect.gen(function* () {
       const session = yield* CurrentSession
-      const ticket = yield* entityFor(payload.id)
-      return yield* ticket
-        .Subscribe({ userId: session.userId })
-        .pipe(
-          Effect.catchTags({ NotFound: Effect.fail, AlreadySubscribed: Effect.fail }),
-          Effect.catch((e) => Effect.fail(intoInfra("ticket.subscribe")(e))),
-        )
+      const ticket = yield* entityForCurrent(payload.id)
+      return yield* ticket.Subscribe({ userId: session.userId }).pipe(
+        Effect.catchTags({ NotFound: Effect.fail, AlreadySubscribed: Effect.fail }),
+        Effect.catch((e) => Effect.fail(intoInfra("ticket.subscribe")(e))),
+      )
     }),
 
   "ticket.unsubscribe": (payload) =>
     Effect.gen(function* () {
       const session = yield* CurrentSession
-      const ticket = yield* entityFor(payload.id)
-      return yield* ticket
-        .Unsubscribe({ userId: session.userId })
-        .pipe(
-          Effect.catchTags({ NotFound: Effect.fail, NotSubscribed: Effect.fail }),
-          Effect.catch((e) => Effect.fail(intoInfra("ticket.unsubscribe")(e))),
-        )
+      const ticket = yield* entityForCurrent(payload.id)
+      return yield* ticket.Unsubscribe({ userId: session.userId }).pipe(
+        Effect.catchTags({ NotFound: Effect.fail, NotSubscribed: Effect.fail }),
+        Effect.catch((e) => Effect.fail(intoInfra("ticket.unsubscribe")(e))),
+      )
     }),
 
-  "ticket.events": (_payload) =>
-    Effect.die(
-      new Error(
-        "ticket.events stream wiring depends on Phase 5 cluster + TicketEntity",
-      ),
-    ),
+  "ticket.events": (payload) => {
+    // Cast: handler-signature inference narrows the Stream error channel to
+    // `NotFound`, but the RPC contract's union (`AuthErrors ∪ NotFound`)
+    // also covers `InfrastructureError` from the DB layer. Runtime contract
+    // holds — the casts just satisfy the call site.
+    const build = Effect.gen(function* () {
+      const db = yield* Database
+      const session = yield* CurrentSession
+      const ticketId = payload.id
+
+      // Membership guard — ticket must belong to the active tenant. RLS
+      // would mask cross-tenant rows but we want to return `NotFound`
+      // explicitly so clients distinguish from "exists but empty log".
+      const exists = yield* db.tx(async (tx) =>
+        tx
+          .select({ id: DbSchema.tickets.id })
+          .from(DbSchema.tickets)
+          .where(
+            and(
+              eq(DbSchema.tickets.id, ticketId),
+              eq(DbSchema.tickets.tenantId, session.activeOrganizationId),
+            ),
+          )
+          .limit(1),
+      )
+      if (exists.length === 0) {
+        return Stream.fail(new Errors.NotFound({ resource: "ticket", id: ticketId }))
+      }
+
+      const decode = (row: typeof DbSchema.ticketEvents.$inferSelect) =>
+        Schema.decodeUnknownEffect(Events.TicketEvent)(row.event).pipe(
+          Effect.catchTag("SchemaError", (e) =>
+            Effect.die(new Error(`ticket_event row failed decode: ${String(e)}`)),
+          ),
+        )
+
+      // Historical replay — every persisted event in version order.
+      const history = yield* db.tx(async (tx) =>
+        tx
+          .select()
+          .from(DbSchema.ticketEvents)
+          .where(eq(DbSchema.ticketEvents.ticketId, ticketId))
+          .orderBy(asc(DbSchema.ticketEvents.version)),
+      )
+      const past = yield* Effect.forEach(history, decode)
+      const lastVersion = yield* Ref.make(past.length > 0 ? past[past.length - 1]!.version : 0)
+
+      // Live tail — poll the event log every 2 seconds for new rows. Pg
+      // LISTEN/NOTIFY (already triggered by `0003_listen_notify_triggers.sql`)
+      // is a follow-up optimisation; polling keeps the wire format identical.
+      const tail = Stream.tick("2 seconds").pipe(
+        Stream.mapEffect(() =>
+          Effect.gen(function* () {
+            const since = yield* Ref.get(lastVersion)
+            const rows = yield* db.tx(async (tx) =>
+              tx
+                .select()
+                .from(DbSchema.ticketEvents)
+                .where(
+                  and(
+                    eq(DbSchema.ticketEvents.ticketId, ticketId),
+                    gt(DbSchema.ticketEvents.version, since),
+                  ),
+                )
+                .orderBy(asc(DbSchema.ticketEvents.version)),
+            )
+            const decoded = yield* Effect.forEach(rows, decode)
+            if (decoded.length > 0) {
+              yield* Ref.set(lastVersion, decoded[decoded.length - 1]!.version)
+            }
+            return decoded as ReadonlyArray<Events.TicketEvent>
+          }),
+        ),
+        Stream.flatMap((chunk) => Stream.fromIterable(chunk)),
+      )
+
+      return Stream.concat(Stream.fromIterable(past), tail)
+    })
+    return Stream.unwrap(build as never) as never
+  },
 })

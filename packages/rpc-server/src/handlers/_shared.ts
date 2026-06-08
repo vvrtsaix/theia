@@ -1,6 +1,6 @@
-import { Effect } from "effect"
 import { CurrentSession } from "@theia/db"
 import { Errors, type TenantId } from "@theia/domain"
+import { Effect } from "effect"
 
 /**
  * The session's `activeOrganizationId` is branded `OrganizationId` (auth side

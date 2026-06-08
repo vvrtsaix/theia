@@ -125,6 +125,12 @@ export const invitations = pgTable("invitation", {
     .notNull()
     .references(() => users.id, { onDelete: "cascade" }),
   expiresAt: timestamp({ withTimezone: true, mode: "date" }).notNull(),
+  /**
+   * better-auth reads this column on every invitation create / lookup; the
+   * field must exist even though we don't reference it from app code. Default
+   * to `now()` so existing rows backfill cleanly when the migration runs.
+   */
+  createdAt: timestamp({ withTimezone: true, mode: "date" }).notNull().defaultNow(),
 })
 
 /**
@@ -138,9 +144,20 @@ export const organizationRoles = pgTable("organization_role", {
   organizationId: uuid()
     .notNull()
     .references(() => organizations.id, { onDelete: "cascade" }),
-  name: text().notNull(),
-  /** Permission object: `{ resource: ["action", ...], ... }`. Matches domain `PermissionStatement`. */
-  permission: jsonb().notNull(),
+  /**
+   * Role identifier. better-auth's `dynamicAccessControl` plugin reads this
+   * as the `role` field on the `organizationRole` model — keep both the JS
+   * key and DB column named `role` so the adapter's generated SQL resolves.
+   */
+  role: text().notNull(),
+  /**
+   * Permission object: `{ resource: ["action", ...], ... }`. Stored as TEXT
+   * (JSON-serialized) — NOT JSONB — because better-auth's `hasPermission`
+   * runtime calls `JSON.parse(permissionsString)` directly. Drizzle's `jsonb`
+   * column type auto-parses on read, which would feed an object into
+   * `JSON.parse` and blow up with `Unexpected identifier "object"`.
+   */
+  permission: text().notNull(),
   createdAt: timestamp({ withTimezone: true, mode: "date" }).notNull().defaultNow(),
   updatedAt: timestamp({ withTimezone: true, mode: "date" }).notNull().defaultNow(),
 })

@@ -1,7 +1,7 @@
-import { DateTime, Effect, Schema } from "effect"
-import { and, count, desc, eq, isNull, lt } from "drizzle-orm"
 import { CurrentSession, Database, Schema as DbSchema } from "@theia/db"
-import { Entities, Errors, Rpc as DomainRpc } from "@theia/domain"
+import { Rpc as DomainRpc, Entities, Errors } from "@theia/domain"
+import { and, count, desc, eq, isNull, lt } from "drizzle-orm"
+import { DateTime, Effect, Schema } from "effect"
 
 /**
  * Per-user notification feed. RLS pins tenant; handler also filters by
@@ -119,8 +119,6 @@ export const NotificationHandlers = DomainRpc.NotificationRpc.toLayer({
 
   "notification.stream": () =>
     Effect.die(
-      new Error(
-        "notification.stream wiring lives in Phase 8 (NotificationEntity push); pending",
-      ),
+      new Error("notification.stream wiring lives in Phase 8 (NotificationEntity push); pending"),
     ),
 })

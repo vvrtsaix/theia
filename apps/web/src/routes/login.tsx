@@ -1,6 +1,7 @@
-import { createSignal, Show, type Component } from "solid-js"
 import { createForm } from "@modular-forms/solid"
+import { A, useNavigate } from "@solidjs/router"
 import { Schema } from "effect"
+import { type Component, Show, createSignal } from "solid-js"
 import { authClient } from "#auth/client"
 import { effectSchema } from "#lib/effect-form"
 
@@ -31,6 +32,7 @@ interface LoginInput {
 }
 
 const Login: Component = () => {
+  const nav = useNavigate()
   const [authError, setAuthError] = createSignal<string | null>(null)
   const [loginForm, { Form, Field }] = createForm<LoginInput>({
     validate: effectSchema(LoginSchema),
@@ -46,66 +48,145 @@ const Login: Component = () => {
     })
     if (res.error) {
       setAuthError(res.error.message ?? "sign in failed")
+      return
+    }
+    // better-auth creates the session with `activeOrganizationId = null`. Set
+    // it to the user's first membership (if any) before redirecting, so the
+    // Shell doesn't bounce through `/onboarding` for users that already
+    // belong to a tenant.
+    const orgs = await authClient.organization.list()
+    const first = orgs.data?.[0]
+    if (first) {
+      await authClient.organization.setActive({ organizationId: first.id })
+      nav("/", { replace: true })
+    } else {
+      nav("/onboarding", { replace: true })
     }
   }
 
   return (
-    <div class="flex h-screen items-center justify-center bg-neutral-950">
-      <Form onSubmit={handleSubmit} class="w-80 space-y-4">
-        <h1 class="text-xl font-semibold text-neutral-100">Sign in</h1>
+    <div class="relative grid min-h-screen grid-cols-1 bg-paper md:grid-cols-[1.05fr_1fr]">
+      <LoginAside />
 
-        <Field name="email">
-          {(field: { value: string | undefined; error: string }, props: Record<string, unknown>) => (
-            <label class="block space-y-1">
-              <span class="text-xs text-neutral-400">Email</span>
-              <input
-                {...props}
-                type="email"
-                autocomplete="email"
-                value={field.value ?? ""}
-                aria-invalid={field.error ? true : undefined}
-                class="w-full rounded-md border border-neutral-800 bg-neutral-900 px-2 py-1.5 text-sm text-neutral-100 outline-none focus:border-neutral-600 aria-[invalid=true]:border-red-500"
-              />
-              <Show when={field.error}>
-                <span class="text-xs text-red-400">{field.error}</span>
-              </Show>
-            </label>
-          )}
-        </Field>
+      <section class="flex items-center justify-center px-8 py-16">
+        <Form onSubmit={handleSubmit} class="w-full max-w-[420px] space-y-10" aria-label="sign in">
+          <header data-reveal style={{ "--i": "0" }} class="space-y-3">
+            <p class="micro-caps">001 · Access</p>
+            <h1 class="font-serif text-[2.75rem] italic leading-[1] tracking-tight text-ink">
+              Welcome <span class="text-ember">back</span>.
+            </h1>
+            <p class="text-[15px] leading-relaxed text-ink-2">
+              Sign in to continue tending the queue. The paper remembers everything you wrote
+              yesterday.
+            </p>
+          </header>
 
-        <Field name="password">
-          {(field: { value: string | undefined; error: string }, props: Record<string, unknown>) => (
-            <label class="block space-y-1">
-              <span class="text-xs text-neutral-400">Password</span>
-              <input
-                {...props}
-                type="password"
-                autocomplete="current-password"
-                value={field.value ?? ""}
-                aria-invalid={field.error ? true : undefined}
-                class="w-full rounded-md border border-neutral-800 bg-neutral-900 px-2 py-1.5 text-sm text-neutral-100 outline-none focus:border-neutral-600 aria-[invalid=true]:border-red-500"
-              />
-              <Show when={field.error}>
-                <span class="text-xs text-red-400">{field.error}</span>
-              </Show>
-            </label>
-          )}
-        </Field>
+          <div class="space-y-8" data-reveal style={{ "--i": "1" }}>
+            <Field name="email">
+              {(
+                field: { value: string | undefined; error: string },
+                props: Record<string, unknown>,
+              ) => (
+                <label class="block space-y-2">
+                  <span class="micro-caps">Email</span>
+                  <input
+                    {...props}
+                    type="email"
+                    autocomplete="email"
+                    placeholder="name@andsystems.tech"
+                    value={field.value ?? ""}
+                    aria-invalid={field.error ? true : undefined}
+                    class="field"
+                  />
+                  <Show when={field.error}>
+                    <span class="block font-mono text-[11px] uppercase tracking-[0.08em] text-ember">
+                      ↳ {field.error}
+                    </span>
+                  </Show>
+                </label>
+              )}
+            </Field>
 
-        <Show when={authError()}>
-          <p class="text-sm text-red-400">{authError()}</p>
-        </Show>
+            <Field name="password">
+              {(
+                field: { value: string | undefined; error: string },
+                props: Record<string, unknown>,
+              ) => (
+                <label class="block space-y-2">
+                  <span class="micro-caps">Password</span>
+                  <input
+                    {...props}
+                    type="password"
+                    autocomplete="current-password"
+                    placeholder="••••••••"
+                    value={field.value ?? ""}
+                    aria-invalid={field.error ? true : undefined}
+                    class="field tracking-[0.2em]"
+                  />
+                  <Show when={field.error}>
+                    <span class="block font-mono text-[11px] uppercase tracking-[0.08em] text-ember">
+                      ↳ {field.error}
+                    </span>
+                  </Show>
+                </label>
+              )}
+            </Field>
+          </div>
 
-        <button
-          type="submit"
-          disabled={loginForm.submitting}
-          class="w-full rounded-md bg-neutral-100 px-3 py-1.5 text-sm font-medium text-neutral-900 hover:bg-white disabled:opacity-50"
-        >
-          {loginForm.submitting ? "Signing in…" : "Sign in"}
-        </button>
-      </Form>
+          <div class="space-y-4" data-reveal style={{ "--i": "2" }}>
+            <Show when={authError()}>
+              <p class="border-l-2 border-ember bg-ember-soft/30 px-3 py-2 font-mono text-[11px] uppercase tracking-[0.12em] text-ember">
+                {authError()}
+              </p>
+            </Show>
+
+            <button type="submit" disabled={loginForm.submitting} class="btn-ink w-full">
+              <span>{loginForm.submitting ? "Signing in" : "Sign in"}</span>
+              <span aria-hidden="true">→</span>
+            </button>
+
+            <p class="font-mono text-[10px] uppercase tracking-[0.18em] text-ink-4">
+              Encrypted in transit · session bound to active tenant
+            </p>
+            <p class="font-mono text-[10px] uppercase tracking-[0.18em] text-ink-3">
+              New here?{" "}
+              <A href="/signup" class="text-ink hover:text-ember">
+                Open an account →
+              </A>
+            </p>
+          </div>
+        </Form>
+      </section>
     </div>
   )
 }
+
+/**
+ * Left-side editorial column. Renders as a quiet manifesto for the product —
+ * sets tone before the user has touched a single field. Hidden under `md`.
+ */
+const LoginAside: Component = () => (
+  <aside class="relative hidden flex-col justify-between border-r border-rule bg-paper-2 px-12 py-12 md:flex">
+    <div>
+      <span class="font-serif text-[2rem] italic leading-none tracking-tight text-ink">Theia</span>
+      <span class="ml-1 inline-block size-1.5 -translate-y-2 rounded-full bg-ember align-middle" />
+      <p class="micro-caps mt-3">Volume I · Ledger</p>
+    </div>
+
+    <figure class="max-w-[42ch] space-y-6">
+      <blockquote class="font-serif text-[2.5rem] italic leading-[1.05] tracking-tight text-ink">
+        A ticket is a <span class="text-ember">letter</span> the future writes to itself.
+      </blockquote>
+      <figcaption class="micro-caps">— house style, 1.0</figcaption>
+    </figure>
+
+    <ol class="grid grid-cols-2 gap-x-4 gap-y-2 font-mono text-[10px] uppercase tracking-[0.16em] text-ink-3">
+      <li>· Multi-tenant</li>
+      <li>· Effect-TS v4</li>
+      <li>· Postgres 18 · RLS</li>
+      <li>· SolidJS · Bun</li>
+    </ol>
+  </aside>
+)
 
 export default Login

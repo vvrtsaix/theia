@@ -1,8 +1,8 @@
-import { Config, Context, Effect, Layer, Redacted } from "effect"
+import { Errors } from "@theia/domain"
 import { sql as drizzleSql } from "drizzle-orm"
 import { drizzle } from "drizzle-orm/postgres-js"
+import { Config, Context, Effect, Layer, Redacted } from "effect"
 import postgres from "postgres"
-import { Errors } from "@theia/domain"
 import { CurrentSession } from "#runtime/CurrentSession"
 
 /**
@@ -29,33 +29,36 @@ const makeDrizzle = (client: postgres.Sql) => drizzle(client, { casing: "snake_c
 export type DrizzleDb = ReturnType<typeof makeDrizzle>
 export type DrizzleTx = Parameters<Parameters<DrizzleDb["transaction"]>[0]>[0]
 
-export class Database extends Context.Service<Database, {
-  /**
-   * The Drizzle instance. Use for **non-tenant-scoped** queries only — RLS is
-   * not bound. For anything touching tenant tables, use `tx` or `txAs`.
-   */
-  readonly db: DrizzleDb
+export class Database extends Context.Service<
+  Database,
+  {
+    /**
+     * The Drizzle instance. Use for **non-tenant-scoped** queries only — RLS is
+     * not bound. For anything touching tenant tables, use `tx` or `txAs`.
+     */
+    readonly db: DrizzleDb
 
-  /**
-   * Run a Drizzle tx with `SET LOCAL app.tenant_id` bound from the active
-   * `CurrentSession`. The callback receives the Drizzle `tx` handle.
-   *
-   * Use this for request handlers behind the auth middleware.
-   */
-  readonly tx: <A>(
-    run: (tx: DrizzleTx) => Promise<A>,
-  ) => Effect.Effect<A, Errors.InfrastructureError, CurrentSession>
+    /**
+     * Run a Drizzle tx with `SET LOCAL app.tenant_id` bound from the active
+     * `CurrentSession`. The callback receives the Drizzle `tx` handle.
+     *
+     * Use this for request handlers behind the auth middleware.
+     */
+    readonly tx: <A>(
+      run: (tx: DrizzleTx) => Promise<A>,
+    ) => Effect.Effect<A, Errors.InfrastructureError, CurrentSession>
 
-  /**
-   * Like `tx` but takes the tenant id explicitly. Use this from cluster
-   * entity handlers, which run outside any `CurrentSession` context but
-   * always know their tenant from the entity address / message payload.
-   */
-  readonly txAs: <A>(
-    tenantId: string,
-    run: (tx: DrizzleTx) => Promise<A>,
-  ) => Effect.Effect<A, Errors.InfrastructureError>
-}>()("@theia/db/Database") {}
+    /**
+     * Like `tx` but takes the tenant id explicitly. Use this from cluster
+     * entity handlers, which run outside any `CurrentSession` context but
+     * always know their tenant from the entity address / message payload.
+     */
+    readonly txAs: <A>(
+      tenantId: string,
+      run: (tx: DrizzleTx) => Promise<A>,
+    ) => Effect.Effect<A, Errors.InfrastructureError>
+  }
+>()("@theia/db/Database") {}
 
 const PgUrl = Config.redacted("DATABASE_URL")
 
@@ -84,7 +87,11 @@ export const DatabaseLive = Layer.effect(
       Effect.tryPromise({
         try: () =>
           db.transaction(async (tx) => {
-            await tx.execute(drizzleSql`SET LOCAL app.tenant_id = ${tenantId}`)
+            // Postgres `SET` does not accept bind parameters; use the
+            // `set_config(name, value, is_local)` function instead. `is_local
+            // = true` makes the GUC scoped to the current transaction, which
+            // is exactly what RLS policies read via `current_setting`.
+            await tx.execute(drizzleSql`SELECT set_config('app.tenant_id', ${tenantId}, true)`)
             return run(tx)
           }),
         catch: (e) =>

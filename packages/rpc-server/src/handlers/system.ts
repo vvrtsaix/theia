@@ -1,7 +1,7 @@
-import { DateTime, Effect, Schema } from "effect"
-import { asc, eq } from "drizzle-orm"
 import { CurrentSession, Database, Schema as DbSchema } from "@theia/db"
-import { Entities, Errors, Rpc as DomainRpc } from "@theia/domain"
+import { Rpc as DomainRpc, Entities, Errors } from "@theia/domain"
+import { asc, eq } from "drizzle-orm"
+import { DateTime, Effect, Schema } from "effect"
 import { intoInfra, sessionTenantId } from "#handlers/_shared"
 
 /**
@@ -59,8 +59,7 @@ export const SystemConfigHandlers = DomainRpc.SystemConfigRpc.toLayer({
     Effect.gen(function* () {
       const { db } = yield* Database
       const rows = yield* Effect.tryPromise({
-        try: () =>
-          db.select().from(DbSchema.systemConfig).orderBy(asc(DbSchema.systemConfig.key)),
+        try: () => db.select().from(DbSchema.systemConfig).orderBy(asc(DbSchema.systemConfig.key)),
         catch: intoInfra("system.config.list"),
       })
       return yield* Effect.forEach(rows, decodeRow)

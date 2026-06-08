@@ -8,7 +8,8 @@
     "#auth/*": "./src/auth/*.ts",
     "#routes/*": "./src/routes/*.tsx",
     "#lib/*": "./src/lib/*.ts",
-    "#lib/effect-form": "./src/lib/effect-form.ts"
+    "#lib/effect-form": "./src/lib/effect-form.ts",
+    "#components/*": "./src/components/*.tsx"
   },
   "scripts": {
     "dev": "vite",
@@ -17,23 +18,24 @@
     "typecheck": "tsc -b --noEmit"
   },
   "dependencies": {
+    "@kobalte/core": "catalog:",
+    "@modular-forms/solid": "catalog:",
+    "@solid-primitives/event-listener": "catalog:",
+    "@solidjs/router": "catalog:",
+    "@tanstack/solid-table": "catalog:",
     "@theia/domain": "workspace:*",
     "@theia/rpc-client": "workspace:*",
-    "solid-js": "catalog:",
-    "@solidjs/router": "catalog:",
-    "@kobalte/core": "catalog:",
-    "@tanstack/solid-table": "catalog:",
-    "lucide-solid": "catalog:",
-    "solid-transition-group": "catalog:",
-    "@solid-primitives/event-listener": "catalog:",
-    "@modular-forms/solid": "catalog:",
     "better-auth": "catalog:",
-    "effect": "catalog:"
+    "effect": "catalog:",
+    "lucide-solid": "catalog:",
+    "solid-js": "catalog:",
+    "solid-transition-group": "catalog:"
   },
   "devDependencies": {
+    "@tailwindcss/vite": "^4.3.0",
     "tailwindcss": "catalog:",
+    "typescript": "catalog:",
     "vite": "catalog:",
-    "vite-plugin-solid": "catalog:",
-    "typescript": "catalog:"
+    "vite-plugin-solid": "catalog:"
   }
 }

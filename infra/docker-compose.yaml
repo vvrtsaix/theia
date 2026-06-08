@@ -12,7 +12,9 @@ services:
     ports:
       - "5432:5432"
     volumes:
-      - pgdata:/var/lib/postgresql/data
+      # Pg18 images store data under /var/lib/postgresql/<major>/docker/...
+      # Mount the parent so pg_upgrade --link works in-place on future bumps.
+      - pgdata:/var/lib/postgresql
       - ./00-bootstrap.sql:/docker-entrypoint-initdb.d/00-bootstrap.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U theia -d theia"]

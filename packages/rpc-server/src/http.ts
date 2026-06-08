@@ -1,45 +1,80 @@
-import { Layer } from "effect"
-import { RpcSerialization, RpcServer } from "effect/unstable/rpc"
+import { resolveSession } from "@theia/auth"
+import { CurrentSession } from "@theia/db"
 import { Rpc as DomainRpc } from "@theia/domain"
+import { Effect, Layer } from "effect"
+import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
+import { type Rpc, type RpcGroup, RpcSerialization, RpcServer } from "effect/unstable/rpc"
 import { AllHandlers } from "#handlers"
 
 /**
- * HTTP mount for every RPC group. Layered so the consumer (`apps/api`) only
- * has to provide:
- *   - `HttpRouter.HttpRouter`        — from `@effect/platform-bun`
- *   - `RpcSerialization.RpcSerialization` — pick JSON / msgpack
- *   - `Database` + `SqlClient` + `CurrentSession`
- *   - `TicketEntity` client (Phase 5)
+ * HTTP mount for every RPC group.
+ *
+ * Why we bypass `RpcServer.layerHttp`:
+ *   - `layerHttp` registers a fixed route handler that has no hook for
+ *     per-request service injection.
+ *   - We need to provide `CurrentSession` (resolved from the request cookie
+ *     via better-auth) to the handler chain on every call.
+ *
+ * Solution: build each group's HTTP handler via `RpcServer.toHttpEffect`,
+ * wrap it with `Effect.provideServiceEffect(CurrentSession, …)` reading the
+ * active `HttpServerRequest`, then register each as a route via
+ * `HttpRouter.addAll`.
+ *
+ * Auth failures (`SessionInvalid`, `NoActiveOrganization`) are mapped to
+ * 401 / 412 at this boundary so domain RPC error unions stay clean.
  */
 
-/** JSON serialization is the default for our SPA <-> API channel. */
+/** JSON serialization is the default for our SPA ↔ API channel. */
 export const SerializationLive = RpcSerialization.layerJson
 
-/** Mount points per group. Keep paths stable — clients depend on these. */
-export const TicketRpcServer = RpcServer.layerHttp({
-  group: DomainRpc.TicketRpc,
-  path: "/rpc/ticket",
-}).pipe(Layer.provide(AllHandlers))
+/**
+ * Resolve `CurrentSession` from the active request. Runs per request via
+ * `Effect.provideServiceEffect`, so each invocation sees a fresh session
+ * decoded from the inbound cookie / Authorization header.
+ */
+const sessionFromRequest = Effect.gen(function* () {
+  const req = yield* HttpServerRequest.HttpServerRequest
+  return yield* resolveSession(req.headers as unknown as Headers)
+})
 
-export const WorkflowRpcServer = RpcServer.layerHttp({
-  group: DomainRpc.WorkflowRpc,
-  path: "/rpc/workflow",
-}).pipe(Layer.provide(AllHandlers))
+/**
+ * Build a single RPC group's per-request handler effect, with session
+ * injection + auth-error → HTTP response mapping baked in.
+ */
+const buildGroup = <Rpcs extends Rpc.Any>(group: RpcGroup.RpcGroup<Rpcs>) =>
+  Effect.gen(function* () {
+    const httpApp = yield* RpcServer.toHttpEffect(group)
+    return httpApp.pipe(
+      Effect.provideServiceEffect(CurrentSession, sessionFromRequest),
+      Effect.catchTags({
+        SessionInvalid: (e) => Effect.succeed(HttpServerResponse.text(e.reason, { status: 401 })),
+        NoActiveOrganization: () =>
+          Effect.succeed(HttpServerResponse.text("no active organization", { status: 412 })),
+      }),
+    )
+  })
 
-export const NotificationRpcServer = RpcServer.layerHttp({
-  group: DomainRpc.NotificationRpc,
-  path: "/rpc/notification",
-}).pipe(Layer.provide(AllHandlers))
+const routes = Effect.gen(function* () {
+  const ticket = yield* buildGroup(DomainRpc.TicketRpc)
+  const workflow = yield* buildGroup(DomainRpc.WorkflowRpc)
+  const notification = yield* buildGroup(DomainRpc.NotificationRpc)
+  const system = yield* buildGroup(DomainRpc.SystemConfigRpc)
+  const audit = yield* buildGroup(DomainRpc.AuditRpc)
+  const search = yield* buildGroup(DomainRpc.SearchRpc)
+  const bulk = yield* buildGroup(DomainRpc.BulkRpc)
+  return [
+    HttpRouter.route("POST", "/rpc/ticket", ticket),
+    HttpRouter.route("POST", "/rpc/workflow", workflow),
+    HttpRouter.route("POST", "/rpc/notification", notification),
+    HttpRouter.route("POST", "/rpc/system", system),
+    HttpRouter.route("POST", "/rpc/audit", audit),
+    HttpRouter.route("POST", "/rpc/search", search),
+    HttpRouter.route("POST", "/rpc/bulk", bulk),
+  ] as const
+})
 
-export const SystemRpcServer = RpcServer.layerHttp({
-  group: DomainRpc.SystemConfigRpc,
-  path: "/rpc/system",
-}).pipe(Layer.provide(AllHandlers))
-
-/** Bundle everything for the API process. */
-export const RpcServerLive = Layer.mergeAll(
-  TicketRpcServer,
-  WorkflowRpcServer,
-  NotificationRpcServer,
-  SystemRpcServer,
-).pipe(Layer.provide(SerializationLive))
+/** Bundle every group + the JSON serialization + the handler implementations. */
+export const RpcServerLive = HttpRouter.addAll(routes).pipe(
+  Layer.provide(AllHandlers),
+  Layer.provide(SerializationLive),
+)

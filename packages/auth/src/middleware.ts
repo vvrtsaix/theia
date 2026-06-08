@@ -1,6 +1,6 @@
-import { Effect, Layer, Schema } from "effect"
 import { CurrentSession } from "@theia/db"
 import { Entities, OrganizationId, UserId } from "@theia/domain"
+import { Effect, Layer, Schema } from "effect"
 import { auth } from "#auth"
 import { NoActiveOrganization, SessionInvalid } from "#errors"
 
@@ -29,14 +29,31 @@ export const resolveSession = (
       return yield* new SessionInvalid({ reason: "no session cookie or expired" })
     }
 
-    if (!session.session.activeOrganizationId) {
-      return yield* new NoActiveOrganization({ userId: session.user.id })
+    // Fall back to the user's first membership when the session has no
+    // active organization set yet (immediately post-signup, or post-signin
+    // before the SPA has called `setActiveOrganization`). Setting the active
+    // org persists for subsequent requests so this is a one-shot fixup.
+    let activeOrgId = session.session.activeOrganizationId
+    if (!activeOrgId) {
+      const orgs = yield* Effect.tryPromise({
+        try: () => auth.api.listOrganizations({ headers }),
+        catch: (cause) =>
+          new SessionInvalid({ reason: `listOrganizations threw: ${String(cause)}` }),
+      })
+      const first = orgs?.[0]
+      if (!first) {
+        return yield* new NoActiveOrganization({ userId: session.user.id })
+      }
+      yield* Effect.tryPromise({
+        try: () => auth.api.setActiveOrganization({ headers, body: { organizationId: first.id } }),
+        catch: (cause) =>
+          new SessionInvalid({ reason: `setActiveOrganization threw: ${String(cause)}` }),
+      })
+      activeOrgId = first.id
     }
 
     const userId = yield* Schema.decodeUnknownEffect(UserId)(session.user.id)
-    const activeOrganizationId = yield* Schema.decodeUnknownEffect(OrganizationId)(
-      session.session.activeOrganizationId,
-    )
+    const activeOrganizationId = yield* Schema.decodeUnknownEffect(OrganizationId)(activeOrgId)
     const userKind = yield* Schema.decodeUnknownEffect(Entities.UserKind)(
       (session.user as { kind?: string }).kind ?? "customer",
     )
@@ -50,7 +67,12 @@ export const resolveSession = (
           reason: `auth.api.getActiveMemberRole threw: ${String(cause)}`,
         }),
     })
-    const role = yield* Schema.decodeUnknownEffect(Entities.UserRole)(memberRole.role ?? "viewer")
+    // `UserRole` is `NonEmptyString.brand("UserRole")` so any non-empty role
+    // string decodes. The fallback covers the (rare) case where better-auth
+    // returns an undefined role for a freshly created membership.
+    const role = yield* Schema.decodeUnknownEffect(Entities.UserRole)(
+      memberRole?.role && memberRole.role.length > 0 ? memberRole.role : "viewer",
+    )
 
     return {
       userId,
@@ -86,16 +108,18 @@ export const requirePermission = (
 ): Effect.Effect<void, SessionInvalid> =>
   Effect.tryPromise({
     try: async () => {
-      const ok = await auth.api.hasPermission({
+      // better-auth returns `{ error, success }` — the response object itself
+      // is always truthy, so `!ok` would silently fail-open. Inspect the
+      // documented `success` flag explicitly.
+      const res = await auth.api.hasPermission({
         headers,
         body: { permissions },
       })
-      if (!ok) {
+      if (res.success !== true) {
         throw new Error("permission denied")
       }
     },
-    catch: (cause) =>
-      new SessionInvalid({ reason: `permission check failed: ${String(cause)}` }),
+    catch: (cause) => new SessionInvalid({ reason: `permission check failed: ${String(cause)}` }),
   })
 
 /** Layer wrapper if a static session is available (tests). */
